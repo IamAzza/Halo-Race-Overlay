@@ -1,0 +1,2534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Race Tracker</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    :root {
+      --bg: #0b0b0d;
+      --panel: #17181c;
+      --panel-2: #111216;
+      --border: #2b2d33;
+      --text: #ffffff;
+      --muted: #a7adb8;
+      --blue: #1fb6ff;
+      --green: #67f05f;
+      --red: #ff6262;
+      --orange: #ffac1c;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, sans-serif;
+    }
+
+    body { overflow: hidden; }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 430px;
+      height: 100vh;
+    }
+
+    .viewer-shell {
+      min-width: 0;
+      padding: 16px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .viewer-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .viewer-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .status-inline {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #121318;
+      border: 1px solid var(--border);
+      color: #d7dbe2;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .video-area {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      border: 2px dashed #333841;
+      border-radius: 14px;
+      background: #0f1014;
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+      cursor: grab;
+    }
+
+    .video-area.panning { cursor: grabbing; }
+    .video-area.lock-mode { cursor: crosshair; }
+    .video-area.dragging-marker { cursor: grabbing; }
+
+    .placeholder-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #8d94a1;
+      font-size: 20px;
+      font-weight: 800;
+      text-align: center;
+      padding: 20px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .world {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform-origin: top left;
+      will-change: transform;
+      z-index: 2;
+    }
+
+    .capture-video,
+    .track-image {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: 0;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+
+    .capture-video {
+      z-index: 1;
+      background: #000;
+      opacity: 1;
+    }
+
+    .track-image {
+      z-index: 2;
+      opacity: 0.7;
+    }
+
+    .overlay-layer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .sidebar-shell {
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, #131417 0%, #101114 100%);
+    }
+
+    .sidebar-header {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.18);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .sidebar-title {
+      font-size: 17px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .tab-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .tab-btn {
+      border: 1px solid var(--border);
+      background: #101116;
+      color: #d2d7df;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: #1a2230;
+      border-color: #334560;
+      color: white;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .sidebar-content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 14px;
+    }
+
+    .tab-pane {
+      display: none;
+      gap: 14px;
+      flex-direction: column;
+    }
+
+    .tab-pane.active {
+      display: flex;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, #181a1f 0%, #15171b 100%);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: 800;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-orange { background: var(--orange); color: black; }
+    .btn-green { background: var(--green); color: black; }
+    .btn-blue { background: var(--blue); color: white; }
+    .btn-red { background: var(--red); color: white; }
+    .btn-gray { background: #2a2d33; color: white; }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-group label {
+      font-size: 12px;
+      color: #c2c8d1;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .file-input,
+    .field-input,
+    .field-select,
+    .range-input {
+      width: 100%;
+      color: white;
+      background: #0e1014;
+      border: 1px solid #313540;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 14px;
+    }
+
+    .range-input {
+      padding: 4px 0;
+      border: none;
+      background: transparent;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .filter-grid label {
+      font-size: 12px;
+      color: #c2c8d1;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .filter-value {
+      font-size: 12px;
+      color: #aab2be;
+      min-width: 52px;
+      text-align: right;
+    }
+
+    .preset-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .preset-btn {
+      border: 1px solid #313540;
+      background: #0f1116;
+      color: white;
+      border-radius: 9px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .small-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #98a1af;
+      line-height: 1.45;
+    }
+
+    .driver-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      background: #101217;
+      border: 1px solid #303542;
+    }
+
+    .driver-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.5);
+      flex: 0 0 auto;
+    }
+
+    .preview-wrap {
+      margin-top: 12px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #2f3440;
+      background: #07080a;
+    }
+
+    .preview-canvas {
+      width: 100%;
+      display: block;
+      background: black;
+    }
+
+    .compact-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .empty-note {
+      color: #9ca4b0;
+      font-size: 14px;
+    }
+
+    .marker-list,
+    .zone-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #d3d8e0;
+      line-height: 1.65;
+      font-size: 14px;
+    }
+
+    .marker-list button,
+    .lock-list button {
+      margin-left: 8px;
+      border: none;
+      background: var(--red);
+      color: white;
+      border-radius: 6px;
+      padding: 4px 7px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .lock-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .lock-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 10px;
+      background: #101217;
+      border: 1px solid #2d313b;
+      margin-bottom: 8px;
+    }
+
+    .lock-item-main { min-width: 0; }
+
+    .lock-item-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .lock-item-title span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .lock-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      background: #181b21;
+      border: 1px solid #333842;
+    }
+
+    .lock-status.locked {
+      color: #52ff52;
+      border-color: rgba(82,255,82,0.35);
+    }
+
+    .lock-status.weak {
+      color: #ffcc33;
+      border-color: rgba(255,204,51,0.35);
+    }
+
+    .lock-status.lost {
+      color: #ff5c5c;
+      border-color: rgba(255,92,92,0.35);
+    }
+
+    .lock-item-sub {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ea6b3;
+    }
+
+    .zone {
+      position: absolute;
+      border: 2px solid;
+      border-radius: 10px;
+      transform-origin: center center;
+      pointer-events: auto;
+    }
+
+    .zone.holeshot {
+      background: rgba(255, 153, 0, 0.18);
+      border-color: #ff9900;
+    }
+
+    .zone.start-finish {
+      background: rgba(82, 255, 82, 0.16);
+      border-color: #52ff52;
+    }
+
+    .zone.checkpoint {
+      background: rgba(0, 191, 255, 0.16);
+      border-color: #00bfff;
+    }
+
+    .zone.selected {
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.4), 0 0 18px rgba(255,255,255,0.18);
+    }
+
+    .zone-label {
+      position: absolute;
+      top: -26px;
+      left: 0;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .handle {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: auto;
+    }
+
+    .resize-handle {
+      width: 14px;
+      height: 14px;
+      right: -7px;
+      bottom: -7px;
+      background: white;
+      border: 2px solid #111;
+      cursor: nwse-resize;
+    }
+
+    .rotate-handle {
+      width: 14px;
+      height: 14px;
+      left: 50%;
+      top: -34px;
+      transform: translateX(-50%);
+      background: #ffcc33;
+      border: 2px solid #111;
+      cursor: grab;
+    }
+
+    .rotate-line {
+      position: absolute;
+      width: 2px;
+      height: 22px;
+      left: 50%;
+      top: -22px;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.55);
+      pointer-events: none;
+    }
+
+    .driver-marker {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 0 14px rgba(0,0,0,0.35);
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      font-size: 0;
+    }
+
+    .driver-marker.selected {
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.45), 0 0 18px rgba(255,255,255,0.28);
+    }
+
+    .driver-marker.dragging {
+      cursor: grabbing;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.55), 0 0 20px rgba(255,255,255,0.35);
+    }
+
+    .driver-marker.locked {
+      box-shadow: 0 0 0 2px rgba(82,255,82,0.55), 0 0 18px rgba(82,255,82,0.30);
+    }
+
+    .driver-marker.weak {
+      box-shadow: 0 0 0 2px rgba(255,204,51,0.55), 0 0 18px rgba(255,204,51,0.30);
+    }
+
+    .driver-marker.lost {
+      box-shadow: 0 0 0 2px rgba(255,92,92,0.55), 0 0 18px rgba(255,92,92,0.30);
+    }
+
+    .driver-marker-lock {
+      position: absolute;
+      top: -18px;
+      right: -6px;
+      padding: 2px 5px;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.88);
+      color: white;
+      pointer-events: none;
+      text-shadow: none;
+    }
+
+    .driver-marker-lock.locked { color: #52ff52; }
+    .driver-marker-lock.weak { color: #ffcc33; }
+    .driver-marker-lock.lost { color: #ff5c5c; }
+
+    .editor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .field-group.full { grid-column: 1 / -1; }
+
+    .muted {
+      color: #9aa3af;
+      font-size: 14px;
+    }
+
+    @media (max-width: 1200px) {
+      body { overflow: auto; }
+      .app-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .viewer-shell { min-height: 65vh; }
+      .sidebar-shell { height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="viewer-shell">
+      <div class="viewer-topbar">
+        <div class="viewer-title">Race Tracker</div>
+        <div class="status-inline">
+          <div class="chip" id="trackerStatusChip">Waiting for Halo capture</div>
+          <div class="chip">Zoom: <span id="zoomValue">100%</span></div>
+          <div class="chip">Pan X: <span id="panXValue">0</span></div>
+          <div class="chip">Pan Y: <span id="panYValue">0</span></div>
+        </div>
+      </div>
+
+      <div class="video-area" id="videoArea">
+        <div class="placeholder-text" id="placeholderText">
+          Capture Halo screen to begin
+        </div>
+
+        <div id="world" class="world">
+          <video id="captureVideo" class="capture-video" autoplay playsinline muted></video>
+          <img id="trackImage" class="track-image" alt="Track preview" />
+          <div id="overlayLayer" class="overlay-layer"></div>
+        </div>
+      </div>
+
+      <canvas id="captureCanvas" style="display:none;"></canvas>
+      <canvas id="processedCanvas" style="display:none;"></canvas>
+    </div>
+
+    <div class="sidebar-shell">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Controls</div>
+        <div class="tab-row">
+          <button class="tab-btn active" data-tab="captureTab" type="button">Capture</button>
+          <button class="tab-btn" data-tab="trackingTab" type="button">Tracking</button>
+          <button class="tab-btn" data-tab="layoutTab" type="button">Layout</button>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <div id="captureTab" class="tab-pane active">
+          <div class="panel">
+            <h2>Halo Screen Capture</h2>
+            <div class="actions">
+              <button id="startCaptureBtn" class="btn btn-blue" type="button">Capture Halo Screen</button>
+              <button id="stopCaptureBtn" class="btn btn-red" type="button">Stop Capture</button>
+              <button id="freezeFrameBtn" class="btn btn-gray" type="button">Freeze Current Frame</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Live Video Filters</h2>
+            <div class="preset-row">
+              <button class="preset-btn" type="button" data-filter-preset="normal">Normal</button>
+              <button class="preset-btn" type="button" data-filter-preset="high-contrast">High Contrast</button>
+              <button class="preset-btn" type="button" data-filter-preset="outline">Outline Boost</button>
+              <button class="preset-btn" type="button" data-filter-preset="tracker">Tracker Mode</button>
+            </div>
+
+            <div class="filter-grid">
+              <label for="brightnessInput">Brightness</label>
+              <div class="filter-value" id="brightnessValue">100%</div>
+              <input id="brightnessInput" class="range-input field-group full" type="range" min="50" max="200" step="5" value="100" />
+
+              <label for="contrastInput">Contrast</label>
+              <div class="filter-value" id="contrastValue">100%</div>
+              <input id="contrastInput" class="range-input field-group full" type="range" min="50" max="250" step="5" value="100" />
+
+              <label for="saturationInput">Saturation</label>
+              <div class="filter-value" id="saturationValue">100%</div>
+              <input id="saturationInput" class="range-input field-group full" type="range" min="0" max="200" step="5" value="100" />
+
+              <label for="outlineBoostInput">Outline Boost</label>
+              <div class="filter-value" id="outlineBoostValue">0</div>
+              <input id="outlineBoostInput" class="range-input field-group full" type="range" min="0" max="8" step="1" value="0" />
+
+              <label for="frozenOpacityInput">Frozen Opacity</label>
+              <div class="filter-value" id="frozenOpacityValue">70%</div>
+              <input id="frozenOpacityInput" class="range-input field-group full" type="range" min="0" max="100" step="5" value="70" />
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>View Controls</h2>
+            <div class="actions">
+              <button id="zoomInBtn" class="btn btn-gray" type="button">Zoom In</button>
+              <button id="zoomOutBtn" class="btn btn-gray" type="button">Zoom Out</button>
+              <button id="resetViewBtn" class="btn btn-gray" type="button">Reset View</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="trackingTab" class="tab-pane">
+          <div class="panel">
+            <h2>Tracker Assist</h2>
+
+            <div class="filter-grid">
+              <label for="assistEnabledInput">Assist</label>
+              <div class="filter-value" id="assistEnabledValue">Python</div>
+              <select id="assistEnabledInput" class="field-select field-group full">
+                <option value="on" selected>Python Backend Active</option>
+              </select>
+
+              <label for="assistContrastInput">Assist Contrast</label>
+              <div class="filter-value" id="assistContrastValue">N/A</div>
+              <input id="assistContrastInput" class="range-input field-group full" type="range" min="80" max="320" step="5" value="190" disabled />
+
+              <label for="assistBrightnessInput">Assist Brightness</label>
+              <div class="filter-value" id="assistBrightnessValue">N/A</div>
+              <input id="assistBrightnessInput" class="range-input field-group full" type="range" min="60" max="180" step="5" value="110" disabled />
+
+              <label for="assistBlurInput">Blur</label>
+              <div class="filter-value" id="assistBlurValue">N/A</div>
+              <input id="assistBlurInput" class="range-input field-group full" type="range" min="0" max="3" step="1" value="1" disabled />
+
+              <label for="assistEdgeInput">Edge Boost</label>
+              <div class="filter-value" id="assistEdgeValue">N/A</div>
+              <input id="assistEdgeInput" class="range-input field-group full" type="range" min="0" max="40" step="1" value="24" disabled />
+
+              <label for="assistThresholdEnabledInput">Threshold</label>
+              <div class="filter-value" id="assistThresholdEnabledValue">N/A</div>
+              <select id="assistThresholdEnabledInput" class="field-select field-group full" disabled>
+                <option value="off" selected>Off</option>
+              </select>
+
+              <label for="assistThresholdInput">Threshold Level</label>
+              <div class="filter-value" id="assistThresholdValue">N/A</div>
+              <input id="assistThresholdInput" class="range-input field-group full" type="range" min="30" max="240" step="5" value="145" disabled />
+
+              <label for="assistSearchRadiusInput">Base Search Radius</label>
+              <div class="filter-value" id="assistSearchRadiusValue">Backend</div>
+              <input id="assistSearchRadiusInput" class="range-input field-group full" type="range" min="50" max="320" step="5" value="150" disabled />
+
+              <label for="assistHoldFramesInput">Weak Hold Frames</label>
+              <div class="filter-value" id="assistHoldFramesValue">Backend</div>
+              <input id="assistHoldFramesInput" class="range-input field-group full" type="range" min="0" max="30" step="1" value="16" disabled />
+
+              <label for="assistMotionWeightInput">Motion Weight</label>
+              <div class="filter-value" id="assistMotionWeightValue">Backend</div>
+              <input id="assistMotionWeightInput" class="range-input field-group full" type="range" min="0" max="20" step="1" value="7" disabled />
+
+              <label for="assistMotionThresholdInput">Motion Threshold</label>
+              <div class="filter-value" id="assistMotionThresholdValue">Backend</div>
+              <input id="assistMotionThresholdInput" class="range-input field-group full" type="range" min="0" max="60" step="1" value="16" disabled />
+            </div>
+
+            <div class="small-note">
+              Tracking is now handled by the Python/OpenCV backend. These old assist sliders are disabled.
+            </div>
+
+            <div class="preview-wrap">
+              <canvas id="assistPreviewCanvas" class="preview-canvas" width="320" height="180"></canvas>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Click To Lock Tracking</h2>
+
+            <div class="field-group">
+              <label for="driverSelect">Select Driver</label>
+              <select id="driverSelect" class="field-select">
+                <option value="">Select a driver</option>
+              </select>
+            </div>
+
+            <div id="driverPreview" class="driver-preview" style="display:none;">
+              <div id="driverPreviewSwatch" class="driver-swatch"></div>
+              <div id="driverPreviewText"></div>
+            </div>
+
+            <div class="actions">
+              <button id="clearLocksBtn" class="btn btn-red" type="button">Clear All Locks</button>
+            </div>
+
+            <div class="small-note">
+              Select a driver. Your next click on the live Halo view locks immediately with the Python tracker.
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Marker Display</h2>
+            <div class="field-group">
+              <label for="markerSizeInput">Dot Size</label>
+              <input id="markerSizeInput" class="range-input" type="range" min="15" max="120" step="5" value="100" />
+              <div class="small-note">Current size: <span id="markerSizeValue">100%</span></div>
+            </div>
+
+            <div class="actions">
+              <button id="clearMarkersBtn" class="btn btn-red" type="button">Clear All Markers</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Active Locks</h2>
+            <div id="locksEmpty" class="empty-note">No drivers locked yet.</div>
+            <ul id="lockList" class="lock-list"></ul>
+          </div>
+
+          <div class="panel">
+            <h2>Assigned Driver Markers</h2>
+            <div id="markersEmpty" class="empty-note">No driver markers placed yet.</div>
+            <ul id="markerList" class="marker-list"></ul>
+          </div>
+        </div>
+
+        <div id="layoutTab" class="tab-pane">
+          <div class="panel">
+            <h2>Saved Layouts</h2>
+            <div class="compact-stack">
+              <div class="field-group">
+                <label for="layoutNameInput">Layout Name</label>
+                <input id="layoutNameInput" class="field-input" type="text" placeholder="nashville-main" />
+              </div>
+
+              <div class="actions">
+                <button id="saveLayoutBtn" class="btn btn-green" type="button">Save Layout</button>
+                <button id="deleteLayoutBtn" class="btn btn-red" type="button">Delete Selected</button>
+              </div>
+
+              <div class="field-group">
+                <label for="savedLayoutsSelect">Saved Layouts</label>
+                <select id="savedLayoutsSelect" class="field-select">
+                  <option value="">Select saved layout</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Reference Image</h2>
+            <input class="file-input" type="file" id="imageUpload" accept="image/*" />
+            <div class="small-note">Optional. Live capture works without uploading anything.</div>
+          </div>
+
+          <div class="panel">
+            <h2>Zone Tools</h2>
+            <div class="actions">
+              <button id="addHoleshotBtn" class="btn btn-orange" type="button">Add Holeshot</button>
+              <button id="addStartFinishBtn" class="btn btn-green" type="button">Add Start/Finish</button>
+              <button id="addCheckpointBtn" class="btn btn-blue" type="button">Add Checkpoint</button>
+              <button id="deleteSelectedBtn" class="btn btn-red" type="button">Delete Selected</button>
+              <button id="clearZonesBtn" class="btn btn-red" type="button">Clear All Zones</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Selected Zone Editor</h2>
+            <div id="noZoneSelected" class="muted">No zone selected yet.</div>
+
+            <div id="zoneEditorFields" style="display:none;">
+              <div class="editor-grid">
+                <div class="field-group full">
+                  <label for="zoneLabelInput">Label</label>
+                  <input id="zoneLabelInput" class="field-input" type="text" />
+                </div>
+
+                <div class="field-group full">
+                  <label for="zoneTypeInput">Type</label>
+                  <input id="zoneTypeInput" class="field-input" type="text" disabled />
+                </div>
+
+                <div class="field-group">
+                  <label for="zoneXInput">X</label>
+                  <input id="zoneXInput" class="field-input" type="number" step="1" />
+                </div>
+
+                <div class="field-group">
+                  <label for="zoneYInput">Y</label>
+                  <input id="zoneYInput" class="field-input" type="number" step="1" />
+                </div>
+
+                <div class="field-group">
+                  <label for="zoneWidthInput">Width</label>
+                  <input id="zoneWidthInput" class="field-input" type="number" step="1" min="30" />
+                </div>
+
+                <div class="field-group">
+                  <label for="zoneHeightInput">Height</label>
+                  <input id="zoneHeightInput" class="field-input" type="number" step="1" min="20" />
+                </div>
+
+                <div class="field-group full">
+                  <label for="zoneRotationInput">Rotation</label>
+                  <input id="zoneRotationInput" class="field-input" type="number" step="1" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Placed Zones</h2>
+            <div id="zonesEmpty" class="empty-note">No zones placed yet.</div>
+            <ul id="zoneList" class="zone-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CV_BACKEND_URL = "http://127.0.0.1:8001";
+
+    const imageUpload = document.getElementById("imageUpload");
+    const trackImage = document.getElementById("trackImage");
+    const placeholderText = document.getElementById("placeholderText");
+    const trackerStatusChip = document.getElementById("trackerStatusChip");
+    const videoArea = document.getElementById("videoArea");
+    const world = document.getElementById("world");
+    const overlayLayer = document.getElementById("overlayLayer");
+    const captureVideo = document.getElementById("captureVideo");
+    const captureCanvas = document.getElementById("captureCanvas");
+    const processedCanvas = document.getElementById("processedCanvas");
+    const startCaptureBtn = document.getElementById("startCaptureBtn");
+    const stopCaptureBtn = document.getElementById("stopCaptureBtn");
+    const freezeFrameBtn = document.getElementById("freezeFrameBtn");
+
+    const brightnessInput = document.getElementById("brightnessInput");
+    const contrastInput = document.getElementById("contrastInput");
+    const saturationInput = document.getElementById("saturationInput");
+    const outlineBoostInput = document.getElementById("outlineBoostInput");
+    const frozenOpacityInput = document.getElementById("frozenOpacityInput");
+
+    const brightnessValue = document.getElementById("brightnessValue");
+    const contrastValue = document.getElementById("contrastValue");
+    const saturationValue = document.getElementById("saturationValue");
+    const outlineBoostValue = document.getElementById("outlineBoostValue");
+    const frozenOpacityValue = document.getElementById("frozenOpacityValue");
+
+    const assistEnabledInput = document.getElementById("assistEnabledInput");
+    const assistEnabledValue = document.getElementById("assistEnabledValue");
+    const assistContrastInput = document.getElementById("assistContrastInput");
+    const assistContrastValue = document.getElementById("assistContrastValue");
+    const assistBrightnessInput = document.getElementById("assistBrightnessInput");
+    const assistBrightnessValue = document.getElementById("assistBrightnessValue");
+    const assistBlurInput = document.getElementById("assistBlurInput");
+    const assistBlurValue = document.getElementById("assistBlurValue");
+    const assistEdgeInput = document.getElementById("assistEdgeInput");
+    const assistEdgeValue = document.getElementById("assistEdgeValue");
+    const assistThresholdEnabledInput = document.getElementById("assistThresholdEnabledInput");
+    const assistThresholdEnabledValue = document.getElementById("assistThresholdEnabledValue");
+    const assistThresholdInput = document.getElementById("assistThresholdInput");
+    const assistThresholdValue = document.getElementById("assistThresholdValue");
+    const assistSearchRadiusInput = document.getElementById("assistSearchRadiusInput");
+    const assistSearchRadiusValue = document.getElementById("assistSearchRadiusValue");
+    const assistHoldFramesInput = document.getElementById("assistHoldFramesInput");
+    const assistHoldFramesValue = document.getElementById("assistHoldFramesValue");
+    const assistMotionWeightInput = document.getElementById("assistMotionWeightInput");
+    const assistMotionWeightValue = document.getElementById("assistMotionWeightValue");
+    const assistMotionThresholdInput = document.getElementById("assistMotionThresholdInput");
+    const assistMotionThresholdValue = document.getElementById("assistMotionThresholdValue");
+    const assistPreviewCanvas = document.getElementById("assistPreviewCanvas");
+
+    const clearLocksBtn = document.getElementById("clearLocksBtn");
+    const lockList = document.getElementById("lockList");
+    const locksEmpty = document.getElementById("locksEmpty");
+
+    const zoomValue = document.getElementById("zoomValue");
+    const panXValue = document.getElementById("panXValue");
+    const panYValue = document.getElementById("panYValue");
+
+    const layoutNameInput = document.getElementById("layoutNameInput");
+    const savedLayoutsSelect = document.getElementById("savedLayoutsSelect");
+    const saveLayoutBtn = document.getElementById("saveLayoutBtn");
+    const deleteLayoutBtn = document.getElementById("deleteLayoutBtn");
+
+    const zoomInBtn = document.getElementById("zoomInBtn");
+    const zoomOutBtn = document.getElementById("zoomOutBtn");
+    const resetViewBtn = document.getElementById("resetViewBtn");
+
+    const driverSelect = document.getElementById("driverSelect");
+    const driverPreview = document.getElementById("driverPreview");
+    const driverPreviewSwatch = document.getElementById("driverPreviewSwatch");
+    const driverPreviewText = document.getElementById("driverPreviewText");
+    const markerSizeInput = document.getElementById("markerSizeInput");
+    const markerSizeValue = document.getElementById("markerSizeValue");
+    const clearMarkersBtn = document.getElementById("clearMarkersBtn");
+    const markerList = document.getElementById("markerList");
+    const markersEmpty = document.getElementById("markersEmpty");
+
+    const addHoleshotBtn = document.getElementById("addHoleshotBtn");
+    const addStartFinishBtn = document.getElementById("addStartFinishBtn");
+    const addCheckpointBtn = document.getElementById("addCheckpointBtn");
+    const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
+    const clearZonesBtn = document.getElementById("clearZonesBtn");
+
+    const zoneList = document.getElementById("zoneList");
+    const zonesEmpty = document.getElementById("zonesEmpty");
+
+    const noZoneSelected = document.getElementById("noZoneSelected");
+    const zoneEditorFields = document.getElementById("zoneEditorFields");
+    const zoneLabelInput = document.getElementById("zoneLabelInput");
+    const zoneTypeInput = document.getElementById("zoneTypeInput");
+    const zoneXInput = document.getElementById("zoneXInput");
+    const zoneYInput = document.getElementById("zoneYInput");
+    const zoneWidthInput = document.getElementById("zoneWidthInput");
+    const zoneHeightInput = document.getElementById("zoneHeightInput");
+    const zoneRotationInput = document.getElementById("zoneRotationInput");
+
+    let zones = [];
+    let selectedZoneId = null;
+    let checkpointCount = 0;
+
+    let drivers = [];
+    let assignedMarkers = [];
+    let selectedDriverId = null;
+    let selectedMarkerId = null;
+    let markerScale = 1;
+
+    let worldWidth = 0;
+    let worldHeight = 0;
+
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+
+    let isPanning = false;
+    let isDraggingMarker = false;
+    let draggingMarkerId = null;
+    let panStartX = 0;
+    let panStartY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+
+    let currentImagePath = "";
+    let currentImageName = "";
+    let driverPollTimer = null;
+
+    let captureStream = null;
+    let captureReady = false;
+
+    let liveFilterState = {
+      brightness: 100,
+      contrast: 100,
+      saturation: 100,
+      outlineBoost: 0,
+      frozenOpacity: 70
+    };
+
+    let trackerLocks = {};
+    let trackingLoopActive = false;
+    let backendTrackingInFlight = false;
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tabId = btn.dataset.tab;
+        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+        document.querySelectorAll(".tab-pane").forEach((p) => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(tabId).classList.add("active");
+      });
+    });
+
+    imageUpload.addEventListener("change", async function () {
+      const file = this.files && this.files[0];
+      if (!file) return;
+
+      try {
+        setTrackerStatus(`Loading image: ${file.name}...`);
+        const imageDataUrl = await fileToDataUrl(file);
+        currentImagePath = imageDataUrl;
+        currentImageName = file.name;
+        await applyImagePath(currentImagePath, currentImageName);
+        setTrackerStatus(`Loaded image: ${currentImageName}`);
+      } catch (error) {
+        console.error(error);
+        alert("Failed to load image.");
+      }
+    });
+
+    startCaptureBtn.addEventListener("click", async function () {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+          alert("Screen capture is not supported in this browser.");
+          return;
+        }
+
+        if (captureStream) stopCapture();
+
+        try {
+          await fetch(`${CV_BACKEND_URL}/tracker/reset`, { method: "POST" });
+        } catch (err) {
+          console.warn("Could not reset backend tracker before capture start", err);
+        }
+
+        setTrackerStatus("Choose Halo MCC window or full display...");
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30, max: 60 } },
+          audio: false
+        });
+
+        captureStream = stream;
+        captureVideo.srcObject = stream;
+        placeholderText.style.display = "none";
+
+        stream.getVideoTracks().forEach((track) => {
+          track.addEventListener("ended", () => stopCapture());
+        });
+
+        captureVideo.onloadedmetadata = function () {
+          captureReady = true;
+
+          worldWidth = captureVideo.videoWidth;
+          worldHeight = captureVideo.videoHeight;
+
+          world.style.width = worldWidth + "px";
+          world.style.height = worldHeight + "px";
+
+          captureVideo.style.width = worldWidth + "px";
+          captureVideo.style.height = worldHeight + "px";
+          captureVideo.style.display = "block";
+
+          overlayLayer.style.width = worldWidth + "px";
+          overlayLayer.style.height = worldHeight + "px";
+
+          if (!currentImagePath) fitWorldToViewer();
+          else applyWorldTransform();
+
+          applyLiveFilters();
+          clearAssistPreview();
+          setTrackerStatus("Live Halo capture active");
+          startTrackingLoop();
+        };
+      } catch (error) {
+        console.error(error);
+        setTrackerStatus("Capture cancelled or failed.");
+      }
+    });
+
+    stopCaptureBtn.addEventListener("click", () => stopCapture());
+    freezeFrameBtn.addEventListener("click", async () => freezeCurrentCaptureFrame());
+
+    saveLayoutBtn.addEventListener("click", async function () {
+      const name = layoutNameInput.value.trim();
+      if (!name) {
+        alert("Enter a layout name first.");
+        return;
+      }
+
+      if (!currentImagePath) {
+        alert("Freeze a Halo frame or load a reference image before saving.");
+        return;
+      }
+
+      try {
+        const payload = buildLayoutObject(name);
+        const res = await fetch(`/api/tracker-layouts/${encodeURIComponent(name)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
+
+        await refreshSavedLayoutsDropdown(name);
+        setTrackerStatus(`Saved layout: ${name}`);
+      } catch (error) {
+        console.error(error);
+        alert("Failed to save layout.");
+      }
+    });
+
+    savedLayoutsSelect.addEventListener("change", async function () {
+      const name = this.value;
+      if (!name) return;
+
+      try {
+        const res = await fetch(`/api/tracker-layouts/${encodeURIComponent(name)}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.layout) throw new Error(data.error || "Load failed");
+
+        await loadLayout(data.layout);
+        layoutNameInput.value = name;
+        setTrackerStatus(`Loaded layout: ${name}`);
+      } catch (error) {
+        console.error(error);
+        alert("Failed to load layout.");
+      }
+    });
+
+    deleteLayoutBtn.addEventListener("click", async function () {
+      const name = savedLayoutsSelect.value;
+      if (!name) {
+        alert("Select a saved layout first.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/tracker-layouts/${encodeURIComponent(name)}`, {
+          method: "DELETE"
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Delete failed");
+
+        await refreshSavedLayoutsDropdown();
+        setTrackerStatus(`Deleted layout: ${name}`);
+      } catch (error) {
+        console.error(error);
+        alert("Failed to delete layout.");
+      }
+    });
+
+    zoomInBtn.addEventListener("click", () => zoomAtCenter(1.15));
+    zoomOutBtn.addEventListener("click", () => zoomAtCenter(1 / 1.15));
+    resetViewBtn.addEventListener("click", () => fitWorldToViewer());
+
+    driverSelect.addEventListener("change", function () {
+      const value = this.value;
+      selectedDriverId = value ? Number(value) : null;
+      renderDriverPreview();
+      renderCursorMode();
+
+      const driver = getDriverById(selectedDriverId);
+      if (driver) {
+        setTrackerStatus(`Selected #${driver.id} ${driver.name}. Next click will lock.`);
+      }
+    });
+
+    markerSizeInput.addEventListener("input", function () {
+      markerScale = Number(this.value) / 100;
+      markerSizeValue.textContent = `${this.value}%`;
+      renderMarkers();
+    });
+
+    clearMarkersBtn.addEventListener("click", async function () {
+      assignedMarkers = [];
+      selectedMarkerId = null;
+      trackerLocks = {};
+      renderMarkers();
+      renderMarkerList();
+      renderDriverPreview();
+      renderLockList();
+      clearAssistPreview();
+
+      try {
+        await fetch(`${CV_BACKEND_URL}/tracker/reset`, { method: "POST" });
+      } catch (err) {
+        console.warn("Failed to reset backend tracker", err);
+      }
+    });
+
+    clearLocksBtn.addEventListener("click", async function () {
+      trackerLocks = {};
+      renderLockList();
+      renderMarkers();
+      setTrackerStatus("Cleared all tracking locks");
+      clearAssistPreview();
+
+      try {
+        await fetch(`${CV_BACKEND_URL}/tracker/reset`, { method: "POST" });
+      } catch (err) {
+        console.warn("Failed to reset backend tracker", err);
+      }
+    });
+
+    brightnessInput.addEventListener("input", function () {
+      liveFilterState.brightness = Number(this.value);
+      applyLiveFilters();
+    });
+
+    contrastInput.addEventListener("input", function () {
+      liveFilterState.contrast = Number(this.value);
+      applyLiveFilters();
+    });
+
+    saturationInput.addEventListener("input", function () {
+      liveFilterState.saturation = Number(this.value);
+      applyLiveFilters();
+    });
+
+    outlineBoostInput.addEventListener("input", function () {
+      liveFilterState.outlineBoost = Number(this.value);
+      applyLiveFilters();
+    });
+
+    frozenOpacityInput.addEventListener("input", function () {
+      liveFilterState.frozenOpacity = Number(this.value);
+      trackImage.style.opacity = `${liveFilterState.frozenOpacity / 100}`;
+      frozenOpacityValue.textContent = `${liveFilterState.frozenOpacity}%`;
+    });
+
+    document.querySelectorAll("[data-filter-preset]").forEach((button) => {
+      button.addEventListener("click", () => applyFilterPreset(button.dataset.filterPreset));
+    });
+
+    addHoleshotBtn.addEventListener("click", function () {
+      if (!worldWidth || !worldHeight) {
+        alert("Freeze a frame or load a reference image first.");
+        return;
+      }
+
+      if (zones.some((z) => z.type === "holeshot")) {
+        alert("You already have a Holeshot zone.");
+        return;
+      }
+
+      const zone = {
+        id: makeId(),
+        type: "holeshot",
+        label: "HOLESHOT",
+        x: worldWidth * 0.35,
+        y: worldHeight * 0.35,
+        width: Math.max(170, worldWidth * 0.11),
+        height: Math.max(38, worldHeight * 0.03),
+        rotation: 0
+      };
+
+      zones.push(zone);
+      selectedZoneId = zone.id;
+      renderAll();
+    });
+
+    addStartFinishBtn.addEventListener("click", function () {
+      if (!worldWidth || !worldHeight) {
+        alert("Freeze a frame or load a reference image first.");
+        return;
+      }
+
+      if (zones.some((z) => z.type === "start-finish")) {
+        alert("You already have a Start/Finish zone.");
+        return;
+      }
+
+      const zone = {
+        id: makeId(),
+        type: "start-finish",
+        label: "START/FINISH",
+        x: worldWidth * 0.45,
+        y: worldHeight * 0.45,
+        width: Math.max(180, worldWidth * 0.12),
+        height: Math.max(38, worldHeight * 0.03),
+        rotation: 0
+      };
+
+      zones.push(zone);
+      selectedZoneId = zone.id;
+      renderAll();
+    });
+
+    addCheckpointBtn.addEventListener("click", function () {
+      if (!worldWidth || !worldHeight) {
+        alert("Freeze a frame or load a reference image first.");
+        return;
+      }
+
+      checkpointCount += 1;
+      const zone = {
+        id: makeId(),
+        type: "checkpoint",
+        label: `CP${checkpointCount}`,
+        x: worldWidth * 0.5 + checkpointCount * 16,
+        y: worldHeight * 0.5 + checkpointCount * 16,
+        width: Math.max(130, worldWidth * 0.1),
+        height: Math.max(34, worldHeight * 0.028),
+        rotation: 0
+      };
+
+      zones.push(zone);
+      selectedZoneId = zone.id;
+      renderAll();
+    });
+
+    deleteSelectedBtn.addEventListener("click", function () {
+      if (!selectedZoneId) return;
+
+      const deleted = zones.find((z) => z.id === selectedZoneId);
+      zones = zones.filter((z) => z.id !== selectedZoneId);
+      selectedZoneId = null;
+
+      if (deleted && deleted.type === "checkpoint") {
+        renumberCheckpoints();
+      }
+
+      renderAll();
+    });
+
+    clearZonesBtn.addEventListener("click", function () {
+      zones = [];
+      selectedZoneId = null;
+      checkpointCount = 0;
+      renderAll();
+    });
+
+    videoArea.addEventListener("wheel", function (event) {
+      if (!worldWidth || !worldHeight || isDraggingMarker) return;
+      event.preventDefault();
+      const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+      zoomAtPoint(factor, event.clientX, event.clientY);
+    }, { passive: false });
+
+    videoArea.addEventListener("mousedown", async function (event) {
+      if (!worldWidth || !worldHeight || isDraggingMarker) return;
+
+      const isMapClick = event.target === videoArea || event.target === world || event.target === overlayLayer;
+
+      if (selectedDriverId && captureReady && isMapClick) {
+        event.preventDefault();
+        const point = getWorldPointer(event);
+        const lockedDriver = await lockDriverAtPoint(selectedDriverId, point.x, point.y);
+
+        if (lockedDriver) {
+          setTrackerStatus(`Locked tracking for #${lockedDriver.id} ${lockedDriver.name}`);
+        }
+        return;
+      }
+
+      if (!isMapClick) return;
+
+      selectedZoneId = null;
+      selectedMarkerId = null;
+      renderAll();
+
+      isPanning = true;
+      videoArea.classList.add("panning");
+      panStartX = event.clientX;
+      panStartY = event.clientY;
+      startPanX = panX;
+      startPanY = panY;
+    });
+
+    window.addEventListener("mousemove", function (event) {
+      if (isDraggingMarker && draggingMarkerId) {
+        const marker = assignedMarkers.find((m) => m.id === draggingMarkerId);
+        if (!marker) return;
+
+        const point = getWorldPointer(event);
+        marker.x = point.x;
+        marker.y = point.y;
+
+        const lock = trackerLocks[String(marker.driverId)];
+        if (lock) {
+          lock.lastX = marker.x;
+          lock.lastY = marker.y;
+          lock.smoothedX = marker.x;
+          lock.smoothedY = marker.y;
+          lock.x = marker.x;
+          lock.y = marker.y;
+          lock.confidence = 1;
+          lock.status = "locked";
+        }
+
+        renderMarkers();
+        renderMarkerList();
+        renderLockList();
+        return;
+      }
+
+      if (!isPanning) return;
+      panX = startPanX + (event.clientX - panStartX);
+      panY = startPanY + (event.clientY - panStartY);
+      applyWorldTransform();
+    });
+
+    window.addEventListener("mouseup", function () {
+      if (isDraggingMarker) {
+        isDraggingMarker = false;
+        draggingMarkerId = null;
+        videoArea.classList.remove("dragging-marker");
+        renderMarkers();
+        renderMarkerList();
+      }
+
+      isPanning = false;
+      videoArea.classList.remove("panning");
+    });
+
+    [zoneLabelInput, zoneXInput, zoneYInput, zoneWidthInput, zoneHeightInput, zoneRotationInput].forEach((input) => {
+      input.addEventListener("input", applyZoneEditorValues);
+    });
+
+    function setTrackerStatus(text) {
+      trackerStatusChip.textContent = text;
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function clearAssistPreview() {
+      const ctx = assistPreviewCanvas.getContext("2d");
+      ctx.clearRect(0, 0, assistPreviewCanvas.width, assistPreviewCanvas.height);
+    }
+
+    async function stopCapture() {
+      captureReady = false;
+
+      if (captureStream) {
+        captureStream.getTracks().forEach((track) => track.stop());
+        captureStream = null;
+      }
+
+      captureVideo.pause();
+      captureVideo.srcObject = null;
+      captureVideo.style.display = "none";
+
+      backendTrackingInFlight = false;
+      clearAssistPreview();
+
+      if (!currentImagePath) {
+        placeholderText.style.display = "flex";
+      }
+
+      try {
+        await fetch(`${CV_BACKEND_URL}/tracker/reset`, { method: "POST" });
+      } catch (err) {
+        console.warn("Failed to reset backend tracker on stop", err);
+      }
+
+      setTrackerStatus("Capture stopped");
+    }
+
+    async function freezeCurrentCaptureFrame() {
+      try {
+        if (!captureVideo.srcObject || !captureReady || !captureVideo.videoWidth || !captureVideo.videoHeight) {
+          alert("No active Halo capture yet.");
+          return;
+        }
+
+        captureCanvas.width = captureVideo.videoWidth;
+        captureCanvas.height = captureVideo.videoHeight;
+
+        const ctx = captureCanvas.getContext("2d");
+        ctx.drawImage(captureVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+        const dataURL = captureCanvas.toDataURL("image/png");
+        currentImagePath = dataURL;
+        currentImageName = "halo-frozen-frame.png";
+
+        await applyImagePath(currentImagePath, currentImageName, { keepView: true });
+        setTrackerStatus("Frozen current Halo frame as reference image");
+      } catch (error) {
+        console.error(error);
+        alert("Failed to freeze current frame.");
+      }
+    }
+
+    function applyFilterPreset(preset) {
+      if (preset === "normal") {
+        liveFilterState = { brightness: 100, contrast: 100, saturation: 100, outlineBoost: 0, frozenOpacity: liveFilterState.frozenOpacity };
+      } else if (preset === "high-contrast") {
+        liveFilterState = { brightness: 110, contrast: 165, saturation: 85, outlineBoost: 1, frozenOpacity: liveFilterState.frozenOpacity };
+      } else if (preset === "outline") {
+        liveFilterState = { brightness: 105, contrast: 185, saturation: 40, outlineBoost: 5, frozenOpacity: liveFilterState.frozenOpacity };
+      } else if (preset === "tracker") {
+        liveFilterState = { brightness: 120, contrast: 210, saturation: 20, outlineBoost: 7, frozenOpacity: liveFilterState.frozenOpacity };
+      }
+
+      brightnessInput.value = String(liveFilterState.brightness);
+      contrastInput.value = String(liveFilterState.contrast);
+      saturationInput.value = String(liveFilterState.saturation);
+      outlineBoostInput.value = String(liveFilterState.outlineBoost);
+      applyLiveFilters();
+    }
+
+    function applyLiveFilters() {
+      brightnessValue.textContent = `${liveFilterState.brightness}%`;
+      contrastValue.textContent = `${liveFilterState.contrast}%`;
+      saturationValue.textContent = `${liveFilterState.saturation}%`;
+      outlineBoostValue.textContent = `${liveFilterState.outlineBoost}`;
+      frozenOpacityValue.textContent = `${liveFilterState.frozenOpacity}%`;
+
+      const shadow = liveFilterState.outlineBoost;
+      captureVideo.style.filter = [
+        `brightness(${liveFilterState.brightness}%)`,
+        `contrast(${liveFilterState.contrast}%)`,
+        `saturate(${liveFilterState.saturation}%)`,
+        `drop-shadow(0 0 ${shadow}px rgba(255,255,255,0.35))`,
+        `drop-shadow(0 0 1px rgba(0,0,0,0.6))`
+      ].join(" ");
+
+      trackImage.style.opacity = `${liveFilterState.frozenOpacity / 100}`;
+    }
+
+    function updateAssistUiValues() {
+      assistEnabledValue.textContent = "Python";
+      assistContrastValue.textContent = "N/A";
+      assistBrightnessValue.textContent = "N/A";
+      assistBlurValue.textContent = "N/A";
+      assistEdgeValue.textContent = "N/A";
+      assistThresholdEnabledValue.textContent = "N/A";
+      assistThresholdValue.textContent = "N/A";
+      assistSearchRadiusValue.textContent = "Backend";
+      assistHoldFramesValue.textContent = "Backend";
+      assistMotionWeightValue.textContent = "Backend";
+      assistMotionThresholdValue.textContent = "Backend";
+    }
+
+    async function loadRaceDrivers() {
+      try {
+        const res = await fetch("/api/race", { cache: "no-store" });
+        const data = await res.json();
+
+        drivers = Array.isArray(data.drivers)
+          ? data.drivers.slice().sort((a, b) => a.position - b.position)
+          : [];
+
+        if (selectedDriverId && !drivers.some((d) => Number(d.id) === Number(selectedDriverId))) {
+          selectedDriverId = null;
+          driverSelect.value = "";
+        }
+
+        if (selectedMarkerId && !assignedMarkers.some((m) => m.id === selectedMarkerId && drivers.some((d) => Number(d.id) === Number(m.driverId)))) {
+          selectedMarkerId = null;
+        }
+
+        assignedMarkers = assignedMarkers.filter((marker) =>
+          drivers.some((d) => Number(d.id) === Number(marker.driverId))
+        );
+
+        Object.keys(trackerLocks).forEach((driverId) => {
+          if (!drivers.some((d) => Number(d.id) === Number(driverId))) {
+            delete trackerLocks[driverId];
+          }
+        });
+
+        renderDriverSelect();
+        renderMarkers();
+        renderMarkerList();
+        renderDriverPreview();
+        renderLockList();
+      } catch (error) {
+        console.error("Failed to load race drivers:", error);
+      }
+    }
+
+    function renderDriverSelect() {
+      const currentSelectedId = selectedDriverId ? String(selectedDriverId) : "";
+
+      driverSelect.innerHTML = `<option value="">Select a driver</option>`;
+
+      drivers.forEach((driver) => {
+        const option = document.createElement("option");
+        option.value = String(driver.id);
+        option.textContent = `#${driver.id} ${driver.name}`;
+
+        if (currentSelectedId && String(driver.id) === currentSelectedId) {
+          option.selected = true;
+        }
+
+        driverSelect.appendChild(option);
+      });
+
+      if (currentSelectedId && drivers.some((d) => String(d.id) === currentSelectedId)) {
+        driverSelect.value = currentSelectedId;
+      }
+
+      renderDriverPreview();
+      renderCursorMode();
+    }
+
+    function getSelectedDriver() {
+      if (selectedDriverId) {
+        return drivers.find((driver) => Number(driver.id) === Number(selectedDriverId)) || null;
+      }
+
+      if (selectedMarkerId) {
+        const marker = assignedMarkers.find((m) => m.id === selectedMarkerId);
+        if (!marker) return null;
+        return drivers.find((driver) => Number(driver.id) === Number(marker.driverId)) || null;
+      }
+
+      return null;
+    }
+
+    function renderDriverPreview() {
+      const driver = getSelectedDriver();
+      if (!driver) {
+        driverPreview.style.display = "none";
+        return;
+      }
+
+      driverPreview.style.display = "flex";
+      driverPreviewSwatch.style.background = driver.primaryColor || "#52ff52";
+      driverPreviewText.textContent = `#${driver.id} ${driver.name}`;
+    }
+
+    function renderCursorMode() {
+      videoArea.classList.toggle("lock-mode", !!selectedDriverId);
+    }
+
+    function getDriverById(driverId) {
+      return drivers.find((driver) => Number(driver.id) === Number(driverId)) || null;
+    }
+
+    function placeOrMoveDriverMarker(driverId, x, y) {
+      const driver = getDriverById(driverId);
+      if (!driver) return;
+
+      const existing = assignedMarkers.find((marker) => Number(marker.driverId) === Number(driverId));
+
+      if (existing) {
+        existing.x = x;
+        existing.y = y;
+        selectedMarkerId = existing.id;
+      } else {
+        assignedMarkers.push({
+          id: makeId(),
+          driverId: Number(driver.id),
+          x,
+          y
+        });
+        selectedMarkerId = assignedMarkers[assignedMarkers.length - 1].id;
+      }
+
+      renderMarkers();
+      renderMarkerList();
+      renderDriverPreview();
+    }
+
+    async function removeDriverMarker(driverId) {
+      assignedMarkers = assignedMarkers.filter((marker) => Number(marker.driverId) !== Number(driverId));
+      delete trackerLocks[String(driverId)];
+
+      if (selectedMarkerId && !assignedMarkers.some((marker) => marker.id === selectedMarkerId)) {
+        selectedMarkerId = null;
+      }
+
+      try {
+        await fetch(`${CV_BACKEND_URL}/tracker/remove`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ driver_id: Number(driverId) })
+        });
+      } catch (err) {
+        console.warn("Failed to remove backend track", err);
+      }
+
+      renderMarkers();
+      renderMarkerList();
+      renderDriverPreview();
+      renderLockList();
+    }
+
+    async function lockDriverAtPoint(driverId, x, y) {
+      const driver = getDriverById(driverId);
+      if (!driver || !captureReady || !captureVideo.videoWidth || !captureVideo.videoHeight) return null;
+
+      captureCanvas.width = captureVideo.videoWidth;
+      captureCanvas.height = captureVideo.videoHeight;
+
+      const ctx = captureCanvas.getContext("2d");
+      ctx.drawImage(captureVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+      const frameDataUrl = captureCanvas.toDataURL("image/jpeg", 0.8);
+
+      try {
+        const res = await fetch(`${CV_BACKEND_URL}/tracker/init`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            driver_id: Number(driverId),
+            x,
+            y,
+            frame_data_url: frameDataUrl,
+            patch_w: 24,
+            patch_h: 24,
+            search_radius: 150
+          })
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          setTrackerStatus("Python lock failed");
+          return null;
+        }
+
+        placeOrMoveDriverMarker(driverId, x, y);
+
+        trackerLocks[String(driverId)] = {
+          driverId: Number(driverId),
+          x,
+          y,
+          smoothedX: x,
+          smoothedY: y,
+          lastX: x,
+          lastY: y,
+          confidence: 1,
+          status: "locked"
+        };
+
+        clearAssistPreview();
+        return driver;
+      } catch (err) {
+        console.error(err);
+        setTrackerStatus("Backend error");
+        return null;
+      }
+    }
+
+    function drawAssistPreviewFromVideo() {
+      if (!captureReady || !captureVideo.videoWidth || !captureVideo.videoHeight) {
+        clearAssistPreview();
+        return;
+      }
+
+      const ctx = assistPreviewCanvas.getContext("2d");
+      const previewW = assistPreviewCanvas.width;
+      const previewH = assistPreviewCanvas.height;
+
+      ctx.clearRect(0, 0, previewW, previewH);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, previewW, previewH);
+
+      const fit = Math.min(previewW / captureVideo.videoWidth, previewH / captureVideo.videoHeight);
+      const drawW = captureVideo.videoWidth * fit;
+      const drawH = captureVideo.videoHeight * fit;
+      const x = (previewW - drawW) / 2;
+      const y = (previewH - drawH) / 2;
+
+      ctx.drawImage(captureVideo, x, y, drawW, drawH);
+    }
+
+    async function trackLockedDrivers() {
+      if (!captureReady || !captureVideo.videoWidth || !captureVideo.videoHeight) return;
+      if (backendTrackingInFlight) return;
+
+      backendTrackingInFlight = true;
+
+      try {
+        captureCanvas.width = captureVideo.videoWidth;
+        captureCanvas.height = captureVideo.videoHeight;
+
+        const ctx = captureCanvas.getContext("2d");
+        ctx.drawImage(captureVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+        const frameDataUrl = captureCanvas.toDataURL("image/jpeg", 0.7);
+
+        const res = await fetch(`${CV_BACKEND_URL}/tracker/update`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            frame_data_url: frameDataUrl
+          })
+        });
+
+        const data = await res.json();
+        if (!data.ok || !Array.isArray(data.results)) return;
+
+        data.results.forEach((r) => {
+          const marker = assignedMarkers.find(m => Number(m.driverId) === Number(r.driver_id));
+          if (!marker) return;
+
+          marker.x = r.x;
+          marker.y = r.y;
+
+          const lock = trackerLocks[String(r.driver_id)] || {
+            driverId: Number(r.driver_id)
+          };
+
+          lock.x = r.x;
+          lock.y = r.y;
+          lock.smoothedX = r.x;
+          lock.smoothedY = r.y;
+          lock.lastX = r.x;
+          lock.lastY = r.y;
+          lock.status = r.status || "locked";
+          lock.confidence = Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0;
+
+          trackerLocks[String(r.driver_id)] = lock;
+        });
+
+        drawAssistPreviewFromVideo();
+        renderMarkers();
+        renderMarkerList();
+        renderLockList();
+      } catch (err) {
+        console.error("Tracking error:", err);
+      } finally {
+        backendTrackingInFlight = false;
+      }
+    }
+
+    function renderLockList() {
+      lockList.innerHTML = "";
+      const entries = Object.values(trackerLocks).sort((a, b) => Number(a.driverId) - Number(b.driverId));
+
+      if (!entries.length) {
+        locksEmpty.style.display = "block";
+        return;
+      }
+
+      locksEmpty.style.display = "none";
+
+      entries.forEach((lock) => {
+        const driver = getDriverById(lock.driverId);
+        if (!driver) return;
+
+        const statusClass = lock.status === "lost" ? "lost" : lock.status === "weak" ? "weak" : "locked";
+        const item = document.createElement("li");
+        item.className = "lock-item";
+
+        item.innerHTML = `
+          <div class="lock-item-main">
+            <div class="lock-item-title">
+              <span class="lock-status ${statusClass}">${statusClass.toUpperCase()}</span>
+              <span>#${driver.id} ${escapeHtml(driver.name)}</span>
+            </div>
+            <div class="lock-item-sub">Confidence ${Math.round((lock.confidence || 0) * 100)}% • x ${Math.round(lock.smoothedX || lock.x || 0)}, y ${Math.round(lock.smoothedY || lock.y || 0)}</div>
+          </div>
+        `;
+
+        const actions = document.createElement("div");
+
+        const relockBtn = document.createElement("button");
+        relockBtn.type = "button";
+        relockBtn.textContent = "Relock";
+        relockBtn.addEventListener("click", () => {
+          selectedDriverId = Number(driver.id);
+          driverSelect.value = String(driver.id);
+          renderDriverPreview();
+          renderCursorMode();
+          setTrackerStatus(`Selected #${driver.id} ${driver.name}. Next click will relock.`);
+        });
+
+        const unlockBtn = document.createElement("button");
+        unlockBtn.type = "button";
+        unlockBtn.textContent = "Unlock";
+        unlockBtn.addEventListener("click", async () => {
+          delete trackerLocks[String(driver.id)];
+          try {
+            await fetch(`${CV_BACKEND_URL}/tracker/remove`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ driver_id: Number(driver.id) })
+            });
+          } catch (err) {
+            console.warn("Failed to remove backend track", err);
+          }
+          renderLockList();
+          renderMarkers();
+          setTrackerStatus(`Unlocked #${driver.id} ${driver.name}`);
+        });
+
+        actions.appendChild(relockBtn);
+        actions.appendChild(unlockBtn);
+        item.appendChild(actions);
+        lockList.appendChild(item);
+      });
+    }
+
+    async function applyImagePath(imagePath, imageName = "", options = {}) {
+      const { keepView = false } = options;
+
+      currentImagePath = imagePath || "";
+      currentImageName = imageName || "";
+
+      if (!currentImagePath) {
+        trackImage.removeAttribute("src");
+        trackImage.style.display = "none";
+
+        if (!captureStream) {
+          placeholderText.style.display = "flex";
+        }
+
+        worldWidth = 0;
+        worldHeight = 0;
+        world.style.width = "0px";
+        world.style.height = "0px";
+        overlayLayer.style.width = "0px";
+        overlayLayer.style.height = "0px";
+        renderAll();
+        return;
+      }
+
+      const previousWidth = worldWidth;
+      const previousHeight = worldHeight;
+
+      await new Promise((resolve, reject) => {
+        trackImage.onload = function () {
+          worldWidth = trackImage.naturalWidth;
+          worldHeight = trackImage.naturalHeight;
+
+          world.style.width = worldWidth + "px";
+          world.style.height = worldHeight + "px";
+          overlayLayer.style.width = worldWidth + "px";
+          overlayLayer.style.height = worldHeight + "px";
+
+          if (captureReady) {
+            captureVideo.style.width = worldWidth + "px";
+            captureVideo.style.height = worldHeight + "px";
+          }
+
+          trackImage.style.width = worldWidth + "px";
+          trackImage.style.height = worldHeight + "px";
+          trackImage.style.display = "block";
+          placeholderText.style.display = "none";
+
+          if (!keepView) fitWorldToViewer();
+          else if (previousWidth && previousHeight) applyWorldTransform();
+          else applyWorldTransform();
+
+          resolve();
+        };
+
+        trackImage.onerror = reject;
+        trackImage.src = currentImagePath;
+      });
+    }
+
+    function buildLayoutObject(name) {
+      return {
+        name,
+        imagePath: currentImagePath,
+        imageName: currentImageName,
+        zones: structuredClone(zones),
+        markers: structuredClone(assignedMarkers),
+        markerScale,
+        checkpointCount,
+        scale,
+        panX,
+        panY
+      };
+    }
+
+    async function loadLayout(layout) {
+      zones = Array.isArray(layout.zones) ? structuredClone(layout.zones) : [];
+      assignedMarkers = Array.isArray(layout.markers) ? structuredClone(layout.markers) : [];
+      markerScale = Number.isFinite(Number(layout.markerScale)) ? Number(layout.markerScale) : 1;
+
+      markerSizeInput.value = String(Math.round(markerScale * 100));
+      markerSizeValue.textContent = `${Math.round(markerScale * 100)}%`;
+
+      checkpointCount = Number.isFinite(Number(layout.checkpointCount))
+        ? Number(layout.checkpointCount)
+        : zones.filter((zone) => zone.type === "checkpoint").length;
+
+      selectedZoneId = null;
+      selectedMarkerId = null;
+      selectedDriverId = null;
+      driverSelect.value = "";
+      scale = Number.isFinite(Number(layout.scale)) ? Number(layout.scale) : 1;
+      panX = Number.isFinite(Number(layout.panX)) ? Number(layout.panX) : 0;
+      panY = Number.isFinite(Number(layout.panY)) ? Number(layout.panY) : 0;
+
+      await applyImagePath(layout.imagePath || "", layout.imageName || "");
+      applyWorldTransform();
+      await loadRaceDrivers();
+      renderAll();
+    }
+
+    async function refreshSavedLayoutsDropdown(selectedName = "") {
+      const res = await fetch("/api/tracker-layouts");
+      const data = await res.json();
+      const names = Array.isArray(data.layouts) ? data.layouts : [];
+
+      savedLayoutsSelect.innerHTML = `<option value="">Select saved layout</option>`;
+
+      names.forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        if (name === selectedName) option.selected = true;
+        savedLayoutsSelect.appendChild(option);
+      });
+    }
+
+    function fitWorldToViewer() {
+      if (!worldWidth || !worldHeight) return;
+
+      const availableWidth = videoArea.clientWidth;
+      const availableHeight = videoArea.clientHeight;
+
+      const fitScale = Math.min(availableWidth / worldWidth, availableHeight / worldHeight);
+      scale = clamp(fitScale, 0.2, 5);
+
+      panX = (availableWidth - worldWidth * scale) / 2;
+      panY = (availableHeight - worldHeight * scale) / 2;
+
+      applyWorldTransform();
+    }
+
+    function zoomAtCenter(factor) {
+      const rect = videoArea.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      zoomAtPoint(factor, centerX, centerY);
+    }
+
+    function zoomAtPoint(factor, clientX, clientY) {
+      const oldScale = scale;
+      const newScale = clamp(scale * factor, 0.2, 6);
+      if (newScale === oldScale) return;
+
+      const rect = videoArea.getBoundingClientRect();
+      const mouseX = clientX - rect.left;
+      const mouseY = clientY - rect.top;
+
+      const worldX = (mouseX - panX) / oldScale;
+      const worldY = (mouseY - panY) / oldScale;
+
+      scale = newScale;
+      panX = mouseX - worldX * scale;
+      panY = mouseY - worldY * scale;
+
+      applyWorldTransform();
+    }
+
+    function applyWorldTransform() {
+      world.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      zoomValue.textContent = Math.round(scale * 100) + "%";
+      panXValue.textContent = Math.round(panX);
+      panYValue.textContent = Math.round(panY);
+    }
+
+    function renumberCheckpoints() {
+      let next = 1;
+      zones.forEach((zone) => {
+        if (zone.type === "checkpoint") {
+          zone.label = `CP${next}`;
+          next += 1;
+        }
+      });
+      checkpointCount = next - 1;
+    }
+
+    function defaultLabelForZone(zone) {
+      if (zone.type === "holeshot") return "HOLESHOT";
+      if (zone.type === "start-finish") return "START/FINISH";
+      return zone.label || "CHECKPOINT";
+    }
+
+    function formatZoneType(type) {
+      if (type === "holeshot") return "Holeshot";
+      if (type === "start-finish") return "Start/Finish";
+      return "Checkpoint";
+    }
+
+    function renderAll() {
+      renderZones();
+      renderMarkers();
+      renderZoneList();
+      renderZoneEditor();
+      renderMarkerList();
+      renderDriverPreview();
+      renderCursorMode();
+      renderLockList();
+    }
+
+    function renderZones() {
+      overlayLayer.innerHTML = "";
+
+      zones.forEach((zone) => {
+        const zoneEl = document.createElement("div");
+        zoneEl.className = `zone ${zone.type}${zone.id === selectedZoneId ? " selected" : ""}`;
+        zoneEl.dataset.zoneId = zone.id;
+        zoneEl.style.left = zone.x + "px";
+        zoneEl.style.top = zone.y + "px";
+        zoneEl.style.width = zone.width + "px";
+        zoneEl.style.height = zone.height + "px";
+        zoneEl.style.transform = `rotate(${zone.rotation}deg)`;
+
+        const labelEl = document.createElement("div");
+        labelEl.className = "zone-label";
+        labelEl.textContent = zone.label;
+
+        const rotateLine = document.createElement("div");
+        rotateLine.className = "rotate-line";
+
+        const rotateHandle = document.createElement("div");
+        rotateHandle.className = "handle rotate-handle";
+
+        const resizeHandle = document.createElement("div");
+        resizeHandle.className = "handle resize-handle";
+
+        zoneEl.appendChild(labelEl);
+        zoneEl.appendChild(rotateLine);
+        zoneEl.appendChild(rotateHandle);
+        zoneEl.appendChild(resizeHandle);
+
+        zoneEl.addEventListener("mousedown", startDragZone);
+        rotateHandle.addEventListener("mousedown", startRotateZone);
+        resizeHandle.addEventListener("mousedown", startResizeZone);
+
+        overlayLayer.appendChild(zoneEl);
+      });
+    }
+
+    function renderMarkers() {
+      const existingMarkers = Array.from(overlayLayer.querySelectorAll(".driver-marker"));
+      existingMarkers.forEach((el) => el.remove());
+
+      assignedMarkers.forEach((marker) => {
+        const driver = getDriverById(marker.driverId);
+        if (!driver) return;
+
+        const lock = trackerLocks[String(marker.driverId)];
+        const statusClass = lock ? (lock.status === "lost" ? "lost" : lock.status === "weak" ? "weak" : "locked") : "";
+
+        const markerEl = document.createElement("div");
+        const isSelected = marker.id === selectedMarkerId;
+        const isDragging = marker.id === draggingMarkerId && isDraggingMarker;
+
+        markerEl.className = `driver-marker${isSelected ? " selected" : ""}${isDragging ? " dragging" : ""}${statusClass ? " " + statusClass : ""}`;
+        markerEl.style.left = marker.x + "px";
+        markerEl.style.top = marker.y + "px";
+        markerEl.style.background = driver.primaryColor || "#52ff52";
+
+        const compactSize = Math.max(8, 14 * markerScale);
+        const compactBorder = Math.max(1, 1.4 * markerScale);
+        markerEl.style.width = `${compactSize}px`;
+        markerEl.style.height = `${compactSize}px`;
+        markerEl.style.minWidth = `${compactSize}px`;
+        markerEl.style.padding = "0";
+        markerEl.style.borderWidth = `${compactBorder}px`;
+        markerEl.textContent = "";
+
+        if (lock) {
+          const lockBadge = document.createElement("div");
+          lockBadge.className = `driver-marker-lock ${statusClass}`;
+          lockBadge.textContent = lock.status === "lost" ? "L" : lock.status === "weak" ? "W" : "LCK";
+          markerEl.appendChild(lockBadge);
+        }
+
+        markerEl.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          selectedMarkerId = marker.id;
+          selectedZoneId = null;
+          selectedDriverId = null;
+          driverSelect.value = "";
+          renderDriverPreview();
+
+          draggingMarkerId = marker.id;
+          isDraggingMarker = true;
+          videoArea.classList.add("dragging-marker");
+          renderMarkers();
+        });
+
+        markerEl.addEventListener("dblclick", async function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          await removeDriverMarker(driver.id);
+        });
+
+        overlayLayer.appendChild(markerEl);
+      });
+    }
+
+    function renderZoneList() {
+      zoneList.innerHTML = "";
+
+      if (!zones.length) {
+        zonesEmpty.style.display = "block";
+        return;
+      }
+
+      zonesEmpty.style.display = "none";
+
+      zones.forEach((zone) => {
+        const item = document.createElement("li");
+        item.textContent = `${zone.label} (${formatZoneType(zone.type)}): x ${Math.round(zone.x)}, y ${Math.round(zone.y)}, w ${Math.round(zone.width)}, h ${Math.round(zone.height)}, rot ${Math.round(zone.rotation)}°`;
+        zoneList.appendChild(item);
+      });
+    }
+
+    function renderMarkerList() {
+      markerList.innerHTML = "";
+
+      const validMarkers = assignedMarkers
+        .map((marker) => ({ marker, driver: getDriverById(marker.driverId) }))
+        .filter((entry) => entry.driver);
+
+      if (!validMarkers.length) {
+        markersEmpty.style.display = "block";
+        return;
+      }
+
+      markersEmpty.style.display = "none";
+
+      validMarkers.forEach(({ marker, driver }) => {
+        const item = document.createElement("li");
+        const lock = trackerLocks[String(driver.id)];
+        const suffix = lock ? ` — ${lock.status.toUpperCase()}` : "";
+        item.innerHTML = `#${driver.id} ${escapeHtml(driver.name)} — x ${Math.round(marker.x)}, y ${Math.round(marker.y)}${suffix}`;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", async () => removeDriverMarker(driver.id));
+
+        item.appendChild(removeBtn);
+        markerList.appendChild(item);
+      });
+    }
+
+    function renderZoneEditor() {
+      const zone = zones.find((z) => z.id === selectedZoneId);
+
+      if (!zone) {
+        noZoneSelected.style.display = "block";
+        zoneEditorFields.style.display = "none";
+        return;
+      }
+
+      noZoneSelected.style.display = "none";
+      zoneEditorFields.style.display = "block";
+
+      zoneLabelInput.value = zone.label;
+      zoneTypeInput.value = formatZoneType(zone.type);
+      zoneXInput.value = Math.round(zone.x);
+      zoneYInput.value = Math.round(zone.y);
+      zoneWidthInput.value = Math.round(zone.width);
+      zoneHeightInput.value = Math.round(zone.height);
+      zoneRotationInput.value = Math.round(zone.rotation);
+    }
+
+    function startDragZone(event) {
+      if (event.target.classList.contains("resize-handle") || event.target.classList.contains("rotate-handle")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const zoneId = event.currentTarget.dataset.zoneId;
+      const zone = zones.find((z) => z.id === zoneId);
+      if (!zone) return;
+
+      selectedZoneId = zoneId;
+      selectedMarkerId = null;
+      renderAll();
+
+      const startMouse = getWorldPointer(event);
+      const startX = zone.x;
+      const startY = zone.y;
+
+      function onMouseMove(moveEvent) {
+        const currentMouse = getWorldPointer(moveEvent);
+        zone.x = startX + (currentMouse.x - startMouse.x);
+        zone.y = startY + (currentMouse.y - startMouse.y);
+        renderAll();
+      }
+
+      function onMouseUp() {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      }
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    }
+
+    function startResizeZone(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const zoneId = event.currentTarget.parentElement.dataset.zoneId;
+      const zone = zones.find((z) => z.id === zoneId);
+      if (!zone) return;
+
+      selectedZoneId = zoneId;
+      selectedMarkerId = null;
+      renderAll();
+
+      const startMouse = getWorldPointer(event);
+      const startWidth = zone.width;
+      const startHeight = zone.height;
+
+      function onMouseMove(moveEvent) {
+        const currentMouse = getWorldPointer(moveEvent);
+        zone.width = Math.max(30, startWidth + (currentMouse.x - startMouse.x));
+        zone.height = Math.max(20, startHeight + (currentMouse.y - startMouse.y));
+        renderAll();
+      }
+
+      function onMouseUp() {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      }
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    }
+
+    function startRotateZone(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const zoneId = event.currentTarget.parentElement.dataset.zoneId;
+      const zone = zones.find((z) => z.id === zoneId);
+      if (!zone) return;
+
+      selectedZoneId = zoneId;
+      selectedMarkerId = null;
+      renderAll();
+
+      function onMouseMove(moveEvent) {
+        const center = getZoneCenterOnScreen(zone);
+        const angleRad = Math.atan2(moveEvent.clientY - center.y, moveEvent.clientX - center.x);
+        zone.rotation = radiansToDegrees(angleRad) + 90;
+        renderAll();
+      }
+
+      function onMouseUp() {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      }
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    }
+
+    function applyZoneEditorValues() {
+      const zone = zones.find((z) => z.id === selectedZoneId);
+      if (!zone) return;
+
+      zone.label = zoneLabelInput.value.trim() || defaultLabelForZone(zone);
+      zone.x = normalizeNumber(zoneXInput.value, zone.x);
+      zone.y = normalizeNumber(zoneYInput.value, zone.y);
+      zone.width = Math.max(30, normalizeNumber(zoneWidthInput.value, zone.width));
+      zone.height = Math.max(20, normalizeNumber(zoneHeightInput.value, zone.height));
+      zone.rotation = normalizeNumber(zoneRotationInput.value, zone.rotation);
+
+      renderZones();
+      renderZoneList();
+    }
+
+    function getWorldPointer(event) {
+      const rect = videoArea.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left - panX) / scale,
+        y: (event.clientY - rect.top - panY) / scale
+      };
+    }
+
+    function getZoneCenterOnScreen(zone) {
+      const rect = videoArea.getBoundingClientRect();
+      return {
+        x: rect.left + panX + (zone.x + zone.width / 2) * scale,
+        y: rect.top + panY + (zone.y + zone.height / 2) * scale
+      };
+    }
+
+    function radiansToDegrees(radians) {
+      return radians * (180 / Math.PI);
+    }
+
+    function normalizeNumber(value, fallback) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function makeId() {
+      return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function startDriverPolling() {
+      if (driverPollTimer) clearInterval(driverPollTimer);
+      driverPollTimer = setInterval(() => {
+        if (!isDraggingMarker) loadRaceDrivers();
+      }, 2000);
+    }
+
+    function startTrackingLoop() {
+      if (trackingLoopActive) return;
+      trackingLoopActive = true;
+
+      const loop = async () => {
+        if (!trackingLoopActive) return;
+
+        if (captureReady && Object.keys(trackerLocks).length) {
+          await trackLockedDrivers();
+        }
+
+        setTimeout(loop, 70);
+      };
+
+      loop();
+    }
+
+    (async function init() {
+      await loadRaceDrivers();
+      await refreshSavedLayoutsDropdown();
+      updateAssistUiValues();
+      applyLiveFilters();
+      clearAssistPreview();
+      renderAll();
+      applyWorldTransform();
+      startDriverPolling();
+    })();
+  </script>
+</body>
+</html>

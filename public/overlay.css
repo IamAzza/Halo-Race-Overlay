@@ -1,0 +1,45 @@
+body {
+    margin: 0;
+    background: transparent;
+    font-family: Arial, sans-serif;
+  }
+  
+  .track-name {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #c8ff2f;
+  }
+  
+  .board {
+    width: 360px;
+    background: rgba(10, 10, 10, 0.88);
+    color: white;
+    border-left: 6px solid #52ff52;
+    padding: 12px;
+  }
+  
+  .title {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+  
+  .row {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+  
+  .pos {
+    font-weight: bold;
+    color: #52ff52;
+  }
+  
+  .name {
+    font-weight: bold;
+  }

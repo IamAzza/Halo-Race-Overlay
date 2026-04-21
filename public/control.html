@@ -1,0 +1,547 @@
+<!-- public/control.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Race Control</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
+      padding: 20px;
+    }
+
+    h1 { margin-bottom: 10px; }
+
+    .topbar, .preset-bar, .add-driver {
+      display: flex;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-group label {
+      font-size: 12px;
+      color: #bbb;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .track-input,
+    .driver-input,
+    .preset-select,
+    .number-input {
+      padding: 10px 12px;
+      min-width: 220px;
+      background: #1a1a1a;
+      color: white;
+      border: 1px solid #333;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .track-input { text-transform: uppercase; }
+
+    .btn {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-weight: 900;
+      cursor: pointer;
+      border: none;
+    }
+
+    .green { background: #52ff52; color: black; }
+    .gray { background: #2b2b2b; color: white; }
+    .red { background: #ff5c5c; color: white; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      border: 1px solid #333;
+      padding: 10px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th { background: #1c1c1c; }
+
+    .grab {
+      cursor: grab;
+      color: #aaa;
+      width: 32px;
+      text-align: center;
+      user-select: none;
+    }
+
+    .dragging { opacity: 0.45; }
+
+    .drop-target {
+      outline: 2px dashed #52ff52;
+      outline-offset: -2px;
+    }
+
+    .name-input {
+      width: 100%;
+      max-width: 280px;
+      padding: 8px 10px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: white;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .number-cell-input {
+      width: 80px;
+      padding: 8px 10px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: white;
+      border-radius: 6px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .color-input {
+      width: 50px;
+      height: 35px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    button {
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .up-btn { background: #52ff52; color: black; }
+    .down-btn { background: #ffcc33; color: black; }
+    .remove-btn { background: #ff5c5c; color: white; }
+
+    .driver-col {
+      width: 320px;
+    }
+
+    .number-col {
+      width: 90px;
+    }
+
+    .actions-col {
+      width: 170px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Race Control</h1>
+
+  <div class="topbar">
+    <div class="field-group">
+      <label for="trackNameInput">Track Name</label>
+      <input id="trackNameInput" class="track-input" />
+    </div>
+    <button id="trackSaveBtn" class="btn green">Update Track</button>
+  </div>
+
+  <div class="preset-bar">
+    <div class="field-group">
+      <label for="presetNameInput">Preset Name</label>
+      <input id="presetNameInput" class="driver-input" placeholder="heat1" />
+    </div>
+
+    <div class="field-group">
+      <label for="presetSelect">Saved Presets</label>
+      <select id="presetSelect" class="preset-select">
+        <option value="">Select preset</option>
+      </select>
+    </div>
+
+    <button id="savePresetBtn" class="btn green">Save Preset</button>
+    <button id="deletePresetBtn" class="btn red">Delete Preset</button>
+  </div>
+
+  <div class="add-driver">
+    <div class="field-group">
+      <label for="newDriverName">Driver Name</label>
+      <input id="newDriverName" class="driver-input" placeholder="Enter name"/>
+    </div>
+
+    <div class="field-group">
+      <label for="newDriverNumber">Number</label>
+      <input id="newDriverNumber" class="number-input" type="number" placeholder="44" />
+    </div>
+
+    <div class="field-group">
+      <label for="newDriverColor">Color</label>
+      <input id="newDriverColor" type="color" value="#52ff52"/>
+    </div>
+
+    <button id="addDriverBtn" class="btn green">Add Driver</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Pos</th>
+        <th class="number-col">#</th>
+        <th class="driver-col">Driver</th>
+        <th>Color</th>
+        <th class="actions-col">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="driverTable"></tbody>
+  </table>
+
+  <script>
+    const table = document.getElementById("driverTable");
+    const trackNameInput = document.getElementById("trackNameInput");
+    const trackSaveBtn = document.getElementById("trackSaveBtn");
+
+    const presetNameInput = document.getElementById("presetNameInput");
+    const presetSelect = document.getElementById("presetSelect");
+    const savePresetBtn = document.getElementById("savePresetBtn");
+    const deletePresetBtn = document.getElementById("deletePresetBtn");
+
+    const newDriverName = document.getElementById("newDriverName");
+    const newDriverNumber = document.getElementById("newDriverNumber");
+    const newDriverColor = document.getElementById("newDriverColor");
+    const addDriverBtn = document.getElementById("addDriverBtn");
+
+    let drivers = [];
+    let draggedIndex = null;
+
+    const DEFAULT_COLOR = "#52ff52";
+
+    function normalizeColor(c) {
+      return typeof c === "string" && c.trim() ? c.trim() : DEFAULT_COLOR;
+    }
+
+    function normalizeName(n) {
+      return String(n || "").trim();
+    }
+
+    function normalizeId(value, fallback) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function updatePositions() {
+      drivers = drivers.map((d, i) => ({
+        ...d,
+        id: normalizeId(d.id, i + 1),
+        position: i + 1,
+        name: normalizeName(d.name),
+        primaryColor: normalizeColor(d.primaryColor)
+      }));
+    }
+
+    async function loadData() {
+      const res = await fetch("/api/race");
+      const data = await res.json();
+
+      trackNameInput.value = data.trackName || "TRACK";
+
+      drivers = (data.drivers || [])
+        .map((d, i) => ({
+          id: normalizeId(d.id, i + 1),
+          name: normalizeName(d.name),
+          position: Number.isFinite(Number(d.position)) ? Number(d.position) : i + 1,
+          primaryColor: normalizeColor(d.primaryColor)
+        }))
+        .sort((a, b) => a.position - b.position);
+
+      updatePositions();
+      render();
+    }
+
+    function render() {
+      table.innerHTML = "";
+
+      drivers.forEach((driver, index) => {
+        const row = document.createElement("tr");
+        row.draggable = true;
+        row.dataset.index = index;
+
+        row.innerHTML = `
+          <td class="grab">☰</td>
+          <td>P${driver.position}</td>
+          <td><input class="number-cell-input" type="number" value="${driver.id}" /></td>
+          <td><input class="name-input" value="${escapeHtml(driver.name)}" /></td>
+          <td><input class="color-input" type="color" value="${driver.primaryColor}" /></td>
+          <td>
+            <button class="up-btn" ${index === 0 ? "disabled" : ""}>⬆</button>
+            <button class="down-btn" ${index === drivers.length - 1 ? "disabled" : ""}>⬇</button>
+            <button class="remove-btn">X</button>
+          </td>
+        `;
+
+        const numberInput = row.querySelector(".number-cell-input");
+        const nameInput = row.querySelector(".name-input");
+        const colorInput = row.querySelector(".color-input");
+        const upBtn = row.querySelector(".up-btn");
+        const downBtn = row.querySelector(".down-btn");
+        const removeBtn = row.querySelector(".remove-btn");
+
+        numberInput.addEventListener("change", async (e) => {
+          drivers[index].id = normalizeId(e.target.value, driver.id);
+          render();
+          await sendUpdate();
+        });
+
+        nameInput.addEventListener("change", async (e) => {
+          drivers[index].name = normalizeName(e.target.value);
+          render();
+          await sendUpdate();
+        });
+
+        colorInput.addEventListener("change", async (e) => {
+          drivers[index].primaryColor = normalizeColor(e.target.value);
+          await sendUpdate();
+        });
+
+        upBtn.addEventListener("click", async () => {
+          if (index === 0) return;
+          [drivers[index - 1], drivers[index]] = [drivers[index], drivers[index - 1]];
+          updatePositions();
+          render();
+          await sendUpdate();
+        });
+
+        downBtn.addEventListener("click", async () => {
+          if (index === drivers.length - 1) return;
+          [drivers[index], drivers[index + 1]] = [drivers[index + 1], drivers[index]];
+          updatePositions();
+          render();
+          await sendUpdate();
+        });
+
+        removeBtn.addEventListener("click", async () => {
+          drivers.splice(index, 1);
+          updatePositions();
+          render();
+          await sendUpdate();
+        });
+
+        row.addEventListener("dragstart", () => {
+          draggedIndex = index;
+          row.classList.add("dragging");
+        });
+
+        row.addEventListener("dragend", () => {
+          row.classList.remove("dragging");
+          clearDropTargets();
+          draggedIndex = null;
+        });
+
+        row.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          row.classList.add("drop-target");
+        });
+
+        row.addEventListener("dragleave", () => {
+          row.classList.remove("drop-target");
+        });
+
+        row.addEventListener("drop", async (e) => {
+          e.preventDefault();
+          row.classList.remove("drop-target");
+          if (draggedIndex === null || draggedIndex === index) return;
+
+          const moved = drivers.splice(draggedIndex, 1)[0];
+          drivers.splice(index, 0, moved);
+
+          updatePositions();
+          render();
+          await sendUpdate();
+          draggedIndex = null;
+        });
+
+        table.appendChild(row);
+      });
+    }
+
+    function clearDropTargets() {
+      table.querySelectorAll("tr").forEach((row) => row.classList.remove("drop-target"));
+    }
+
+    async function sendUpdate() {
+      updatePositions();
+
+      const payload = {
+        trackName: trackNameInput.value.trim().toUpperCase() || "TRACK",
+        drivers: drivers
+          .filter((d) => normalizeName(d.name))
+          .map((d, i) => ({
+            id: normalizeId(d.id, i + 1),
+            name: normalizeName(d.name),
+            position: i + 1,
+            primaryColor: normalizeColor(d.primaryColor)
+          }))
+      };
+
+      await fetch("/api/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    async function refreshPresetDropdown(selectedName = "") {
+      const res = await fetch("/api/presets");
+      const data = await res.json();
+
+      const presetNames = data.presets || [];
+
+      presetSelect.innerHTML = `<option value="">Select preset</option>`;
+
+      presetNames.forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        if (name === selectedName) option.selected = true;
+        presetSelect.appendChild(option);
+      });
+    }
+
+    async function savePreset(name) {
+      const presetName = normalizeName(name);
+      if (!presetName) return alert("Enter preset name");
+
+      await fetch(`/api/presets/${encodeURIComponent(presetName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trackName: trackNameInput.value.trim().toUpperCase() || "TRACK",
+          drivers: drivers.map((d, i) => ({
+            id: normalizeId(d.id, i + 1),
+            name: normalizeName(d.name),
+            position: i + 1,
+            primaryColor: normalizeColor(d.primaryColor)
+          }))
+        })
+      });
+
+      await refreshPresetDropdown(presetName);
+      presetNameInput.value = presetName;
+    }
+
+    async function loadPreset(name) {
+      const presetName = normalizeName(name);
+      if (!presetName) return;
+
+      const res = await fetch(`/api/presets/${encodeURIComponent(presetName)}`);
+      const data = await res.json();
+
+      if (!data.preset) return;
+
+      drivers = (data.preset.drivers || [])
+        .map((d, i) => ({
+          id: normalizeId(d.id, i + 1),
+          name: normalizeName(d.name),
+          position: Number.isFinite(Number(d.position)) ? Number(d.position) : i + 1,
+          primaryColor: normalizeColor(d.primaryColor)
+        }))
+        .sort((a, b) => a.position - b.position);
+
+      trackNameInput.value = data.preset.trackName || "TRACK";
+
+      updatePositions();
+      render();
+      await sendUpdate();
+      await refreshPresetDropdown(presetName);
+      presetNameInput.value = presetName;
+    }
+
+    async function deletePreset(name) {
+      const presetName = normalizeName(name);
+      if (!presetName) return;
+
+      await fetch(`/api/presets/${encodeURIComponent(presetName)}`, {
+        method: "DELETE"
+      });
+
+      await refreshPresetDropdown();
+      presetNameInput.value = "";
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    trackSaveBtn.addEventListener("click", async () => {
+      await sendUpdate();
+    });
+
+    savePresetBtn.addEventListener("click", async () => {
+      await savePreset(presetNameInput.value);
+    });
+
+    deletePresetBtn.addEventListener("click", async () => {
+      await deletePreset(presetNameInput.value || presetSelect.value);
+    });
+
+    presetSelect.addEventListener("change", async () => {
+      const selected = presetSelect.value;
+      if (!selected) return;
+      presetNameInput.value = selected;
+      await loadPreset(selected);
+    });
+
+    addDriverBtn.addEventListener("click", async () => {
+      const name = normalizeName(newDriverName.value);
+      if (!name) return;
+
+      const number = normalizeId(newDriverNumber.value, drivers.length + 1);
+
+      drivers.push({
+        id: number,
+        name,
+        position: drivers.length + 1,
+        primaryColor: normalizeColor(newDriverColor.value)
+      });
+
+      updatePositions();
+      render();
+      await sendUpdate();
+
+      newDriverName.value = "";
+      newDriverNumber.value = "";
+      newDriverColor.value = DEFAULT_COLOR;
+    });
+
+    newDriverName.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addDriverBtn.click();
+      }
+    });
+
+    (async () => {
+      await refreshPresetDropdown();
+      await loadData();
+    })();
+  </script>
+</body>
+</html>
