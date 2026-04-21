@@ -246,6 +246,79 @@ app.delete("/api/presets/:name", (req, res) => {
   }
 });
 
+// =====================
+// CV TRACKER PROXY (Render-safe)
+// =====================
+
+app.get("/api/cv/health", async (req, res) => {
+  try {
+    const response = await fetch(`${process.env.CV_TRACKER_URL}/health`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("CV health error:", err);
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.post("/api/cv/init", async (req, res) => {
+  try {
+    const response = await fetch(`${process.env.CV_TRACKER_URL}/tracker/init`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("CV init error:", err);
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.post("/api/cv/update", async (req, res) => {
+  try {
+    const response = await fetch(`${process.env.CV_TRACKER_URL}/tracker/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("CV update error:", err);
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.post("/api/cv/remove", async (req, res) => {
+  try {
+    const response = await fetch(`${process.env.CV_TRACKER_URL}/tracker/remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("CV remove error:", err);
+    res.status(500).json({ ok: false });
+  }
+});
+
+app.post("/api/cv/reset", async (req, res) => {
+  try {
+    const response = await fetch(`${process.env.CV_TRACKER_URL}/tracker/reset`, {
+      method: "POST"
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("CV reset error:", err);
+    res.status(500).json({ ok: false });
+  }
+});
+
 io.on("connection", (socket) => {
   const data = loadRaceData();
   socket.emit("raceUpdate", data);
