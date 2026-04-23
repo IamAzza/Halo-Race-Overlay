@@ -20,7 +20,7 @@ class TrackState:
     y: float
     patch_w: int
     patch_h: int
-    search_radius: int = 120
+    search_radius: int = 180
     confidence: float = 1.0
     status: str = "locked"
     vx: float = 0.0
@@ -69,9 +69,9 @@ class MultiTrackerEngine:
         frame_bgr: np.ndarray,
         x: float,
         y: float,
-        patch_w: int = 24,
-        patch_h: int = 24,
-        search_radius: int = 140,
+        patch_w: int = 34,
+        patch_h: int = 34,
+        search_radius: int = 190,
     ) -> bool:
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         patch = self._extract_patch(gray, x, y, patch_w, patch_h)
@@ -199,8 +199,8 @@ class MultiTrackerEngine:
             confidence *= 0.86
 
         hold_mode = False
-        if confidence < 0.50:
-            if track.hold_frames < 16:
+        if confidence < 0.42:
+            if track.hold_frames < 28:
                 hold_mode = True
                 track.hold_frames += 1
         else:
@@ -249,12 +249,12 @@ class MultiTrackerEngine:
                     0.04,
                     0,
                 ).astype(np.uint8)
-        elif hold_mode or confidence >= 0.28:
+        elif hold_mode or confidence >= 0.20:
             track.status = "weak"
             track.lost_frames = 0
         else:
             track.lost_frames += 1
-            track.status = "lost" if track.lost_frames >= 8 else "weak"
+            track.status = "lost" if track.lost_frames >= 16 else "weak"
 
         return TrackResult(
             driver_id=track.driver_id,

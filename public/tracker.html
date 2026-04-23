@@ -1789,9 +1789,9 @@
             x,
             y,
             frame_data_url: frameDataUrl,
-            patch_w: 24,
-            patch_h: 24,
-            search_radius: 150
+            patch_w: 34,
+            patch_h: 34,
+            search_radius: 190
           })
         });
 
@@ -1861,7 +1861,7 @@
         const ctx = captureCanvas.getContext("2d");
         ctx.drawImage(captureVideo, 0, 0, captureCanvas.width, captureCanvas.height);
 
-        const frameDataUrl = captureCanvas.toDataURL("image/jpeg", 0.7);
+        const frameDataUrl = captureCanvas.toDataURL("image/jpeg", 0.82);
 
         const res = await fetch(`${CV_BACKEND_URL}/tracker/update`, {
           method: "POST",
