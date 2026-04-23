@@ -20,7 +20,7 @@ class TrackState:
     y: float
     patch_w: int
     patch_h: int
-    search_radius: int = 180
+    search_radius: int = 240
     confidence: float = 1.0
     status: str = "locked"
     vx: float = 0.0
@@ -69,9 +69,9 @@ class MultiTrackerEngine:
         frame_bgr: np.ndarray,
         x: float,
         y: float,
-        patch_w: int = 34,
-        patch_h: int = 34,
-        search_radius: int = 190,
+        patch_w: int = 44,
+        patch_h: int = 44,
+        search_radius: int = 240,
     ) -> bool:
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         patch = self._extract_patch(gray, x, y, patch_w, patch_h)
@@ -184,10 +184,10 @@ class MultiTrackerEngine:
             + min(0.10, best_motion * 0.18)
         )
 
-        if raw_move > 45:
-            confidence *= 0.8
-        if raw_move > 70:
-            confidence *= 0.6
+        if raw_move > 60:
+            confidence *= 0.88
+        if raw_move > 95:
+            confidence *= 0.72
 
         if raw_move > 60 and confidence < 0.55:
             best_center_x = track.x
@@ -199,8 +199,8 @@ class MultiTrackerEngine:
             confidence *= 0.86
 
         hold_mode = False
-        if confidence < 0.42:
-            if track.hold_frames < 28:
+        if confidence < 0.32:
+            if track.hold_frames < 45:
                 hold_mode = True
                 track.hold_frames += 1
         else:
@@ -238,23 +238,23 @@ class MultiTrackerEngine:
         track.vy = track.y - prev_y
         track.confidence = float(confidence)
 
-        if not hold_mode and confidence >= 0.62:
+        if not hold_mode and confidence >= 0.55:
             track.status = "locked"
             track.lost_frames = 0
-            if best_patch is not None:
+            if best_patch is not None and best_motion >= 0.03:
                 track.template = cv2.addWeighted(
                     track.template.astype(np.float32),
-                    0.96,
+                    0.985,
                     best_patch.astype(np.float32),
-                    0.04,
+                    0.015,
                     0,
                 ).astype(np.uint8)
-        elif hold_mode or confidence >= 0.20:
+        elif hold_mode or confidence >= 0.12:
             track.status = "weak"
             track.lost_frames = 0
         else:
             track.lost_frames += 1
-            track.status = "lost" if track.lost_frames >= 16 else "weak"
+            track.status = "lost" if track.lost_frames >= 30 else "weak"
 
         return TrackResult(
             driver_id=track.driver_id,
