@@ -721,68 +721,6 @@
 
         <div id="trackingTab" class="tab-pane">
           <div class="panel">
-            <h2>Tracker Assist</h2>
-
-            <div class="filter-grid">
-              <label for="assistEnabledInput">Assist</label>
-              <div class="filter-value" id="assistEnabledValue">Python</div>
-              <select id="assistEnabledInput" class="field-select field-group full">
-                <option value="on" selected>Python Backend Active</option>
-              </select>
-
-              <label for="assistContrastInput">Assist Contrast</label>
-              <div class="filter-value" id="assistContrastValue">N/A</div>
-              <input id="assistContrastInput" class="range-input field-group full" type="range" min="80" max="320" step="5" value="190" disabled />
-
-              <label for="assistBrightnessInput">Assist Brightness</label>
-              <div class="filter-value" id="assistBrightnessValue">N/A</div>
-              <input id="assistBrightnessInput" class="range-input field-group full" type="range" min="60" max="180" step="5" value="110" disabled />
-
-              <label for="assistBlurInput">Blur</label>
-              <div class="filter-value" id="assistBlurValue">N/A</div>
-              <input id="assistBlurInput" class="range-input field-group full" type="range" min="0" max="3" step="1" value="1" disabled />
-
-              <label for="assistEdgeInput">Edge Boost</label>
-              <div class="filter-value" id="assistEdgeValue">N/A</div>
-              <input id="assistEdgeInput" class="range-input field-group full" type="range" min="0" max="40" step="1" value="24" disabled />
-
-              <label for="assistThresholdEnabledInput">Threshold</label>
-              <div class="filter-value" id="assistThresholdEnabledValue">N/A</div>
-              <select id="assistThresholdEnabledInput" class="field-select field-group full" disabled>
-                <option value="off" selected>Off</option>
-              </select>
-
-              <label for="assistThresholdInput">Threshold Level</label>
-              <div class="filter-value" id="assistThresholdValue">N/A</div>
-              <input id="assistThresholdInput" class="range-input field-group full" type="range" min="30" max="240" step="5" value="145" disabled />
-
-              <label for="assistSearchRadiusInput">Base Search Radius</label>
-              <div class="filter-value" id="assistSearchRadiusValue">Backend</div>
-              <input id="assistSearchRadiusInput" class="range-input field-group full" type="range" min="50" max="320" step="5" value="150" disabled />
-
-              <label for="assistHoldFramesInput">Weak Hold Frames</label>
-              <div class="filter-value" id="assistHoldFramesValue">Backend</div>
-              <input id="assistHoldFramesInput" class="range-input field-group full" type="range" min="0" max="30" step="1" value="16" disabled />
-
-              <label for="assistMotionWeightInput">Motion Weight</label>
-              <div class="filter-value" id="assistMotionWeightValue">Backend</div>
-              <input id="assistMotionWeightInput" class="range-input field-group full" type="range" min="0" max="20" step="1" value="7" disabled />
-
-              <label for="assistMotionThresholdInput">Motion Threshold</label>
-              <div class="filter-value" id="assistMotionThresholdValue">Backend</div>
-              <input id="assistMotionThresholdInput" class="range-input field-group full" type="range" min="0" max="60" step="1" value="16" disabled />
-            </div>
-
-            <div class="small-note">
-              Tracking is now handled by the Python/OpenCV backend. These old assist sliders are disabled.
-            </div>
-
-            <div class="preview-wrap">
-              <canvas id="assistPreviewCanvas" class="preview-canvas" width="320" height="180"></canvas>
-            </div>
-          </div>
-
-          <div class="panel">
             <h2>Click To Lock Tracking</h2>
 
             <div class="field-group">
@@ -954,30 +892,6 @@
     const saturationValue = document.getElementById("saturationValue");
     const outlineBoostValue = document.getElementById("outlineBoostValue");
     const frozenOpacityValue = document.getElementById("frozenOpacityValue");
-
-    const assistEnabledInput = document.getElementById("assistEnabledInput");
-    const assistEnabledValue = document.getElementById("assistEnabledValue");
-    const assistContrastInput = document.getElementById("assistContrastInput");
-    const assistContrastValue = document.getElementById("assistContrastValue");
-    const assistBrightnessInput = document.getElementById("assistBrightnessInput");
-    const assistBrightnessValue = document.getElementById("assistBrightnessValue");
-    const assistBlurInput = document.getElementById("assistBlurInput");
-    const assistBlurValue = document.getElementById("assistBlurValue");
-    const assistEdgeInput = document.getElementById("assistEdgeInput");
-    const assistEdgeValue = document.getElementById("assistEdgeValue");
-    const assistThresholdEnabledInput = document.getElementById("assistThresholdEnabledInput");
-    const assistThresholdEnabledValue = document.getElementById("assistThresholdEnabledValue");
-    const assistThresholdInput = document.getElementById("assistThresholdInput");
-    const assistThresholdValue = document.getElementById("assistThresholdValue");
-    const assistSearchRadiusInput = document.getElementById("assistSearchRadiusInput");
-    const assistSearchRadiusValue = document.getElementById("assistSearchRadiusValue");
-    const assistHoldFramesInput = document.getElementById("assistHoldFramesInput");
-    const assistHoldFramesValue = document.getElementById("assistHoldFramesValue");
-    const assistMotionWeightInput = document.getElementById("assistMotionWeightInput");
-    const assistMotionWeightValue = document.getElementById("assistMotionWeightValue");
-    const assistMotionThresholdInput = document.getElementById("assistMotionThresholdInput");
-    const assistMotionThresholdValue = document.getElementById("assistMotionThresholdValue");
-    const assistPreviewCanvas = document.getElementById("assistPreviewCanvas");
 
     const clearLocksBtn = document.getElementById("clearLocksBtn");
     const lockList = document.getElementById("lockList");
@@ -1260,8 +1174,6 @@
       renderMarkerList();
       renderDriverPreview();
       renderLockList();
-      clearAssistPreview();
-
       try {
         await fetch(`${CV_BACKEND_URL}/tracker/reset`, { method: "POST" });
       } catch (err) {
@@ -1274,8 +1186,6 @@
       renderLockList();
       renderMarkers();
       setTrackerStatus("Cleared all tracking locks");
-      clearAssistPreview();
-
       try {
         await fetch(`${CV_BACKEND_URL}/tracker/reset`, { method: "POST" });
       } catch (err) {
@@ -1511,11 +1421,6 @@
       });
     }
 
-    function clearAssistPreview() {
-      const ctx = assistPreviewCanvas.getContext("2d");
-      ctx.clearRect(0, 0, assistPreviewCanvas.width, assistPreviewCanvas.height);
-    }
-
     async function stopCapture() {
       captureReady = false;
 
@@ -1529,7 +1434,6 @@
       captureVideo.style.display = "none";
 
       backendTrackingInFlight = false;
-      clearAssistPreview();
 
       if (!currentImagePath) {
         placeholderText.style.display = "flex";
@@ -1604,20 +1508,6 @@
       ].join(" ");
 
       trackImage.style.opacity = `${liveFilterState.frozenOpacity / 100}`;
-    }
-
-    function updateAssistUiValues() {
-      assistEnabledValue.textContent = "Python";
-      assistContrastValue.textContent = "N/A";
-      assistBrightnessValue.textContent = "N/A";
-      assistBlurValue.textContent = "N/A";
-      assistEdgeValue.textContent = "N/A";
-      assistThresholdEnabledValue.textContent = "N/A";
-      assistThresholdValue.textContent = "N/A";
-      assistSearchRadiusValue.textContent = "Backend";
-      assistHoldFramesValue.textContent = "Backend";
-      assistMotionWeightValue.textContent = "Backend";
-      assistMotionThresholdValue.textContent = "Backend";
     }
 
     async function loadRaceDrivers() {
@@ -1816,36 +1706,12 @@
           status: "locked"
         };
 
-        clearAssistPreview();
         return driver;
       } catch (err) {
         console.error(err);
         setTrackerStatus("Backend error");
         return null;
       }
-    }
-
-    function drawAssistPreviewFromVideo() {
-      if (!captureReady || !captureVideo.videoWidth || !captureVideo.videoHeight) {
-        clearAssistPreview();
-        return;
-      }
-
-      const ctx = assistPreviewCanvas.getContext("2d");
-      const previewW = assistPreviewCanvas.width;
-      const previewH = assistPreviewCanvas.height;
-
-      ctx.clearRect(0, 0, previewW, previewH);
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, previewW, previewH);
-
-      const fit = Math.min(previewW / captureVideo.videoWidth, previewH / captureVideo.videoHeight);
-      const drawW = captureVideo.videoWidth * fit;
-      const drawH = captureVideo.videoHeight * fit;
-      const x = (previewW - drawW) / 2;
-      const y = (previewH - drawH) / 2;
-
-      ctx.drawImage(captureVideo, x, y, drawW, drawH);
     }
 
     async function trackLockedDrivers() {
@@ -1899,7 +1765,6 @@
           trackerLocks[String(r.driver_id)] = lock;
         });
 
-        drawAssistPreviewFromVideo();
         renderMarkers();
         renderMarkerList();
         renderLockList();
@@ -2522,9 +2387,7 @@
     (async function init() {
       await loadRaceDrivers();
       await refreshSavedLayoutsDropdown();
-      updateAssistUiValues();
       applyLiveFilters();
-      clearAssistPreview();
       renderAll();
       applyWorldTransform();
       startDriverPolling();
