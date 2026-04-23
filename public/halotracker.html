@@ -47,6 +47,7 @@
     .status.locked { color: #56f056; }
     .status.weak { color: #ffcc33; }
     .status.lost { color: #ff6666; }
+    .status.locking { color: #66b3ff; }
     .status.idle { color: #aaa; }
 
     .stage {
@@ -97,14 +98,15 @@
       <select id="driverSelect">
         <option value="">Select driver</option>
       </select>
-      <button id="relockBtn" type="button">Relock Next Click</button>
+      <button id="relockBtn" type="button">Lock Selected Driver</button>
+      <label for="dotSizeInput">Dot Size</label>
+      <input id="dotSizeInput" type="range" min="8" max="30" step="1" value="14" />
       <div id="status" class="status idle">idle</div>
     </div>
 
     <div class="stage" id="stage">
       <div id="world" class="world">
         <video id="video" autoplay playsinline muted></video>
-        <div id="dot" class="dot"></div>
       </div>
     </div>
 
@@ -115,20 +117,21 @@
     const captureBtn = document.getElementById("captureBtn");
     const driverSelect = document.getElementById("driverSelect");
     const relockBtn = document.getElementById("relockBtn");
+    const dotSizeInput = document.getElementById("dotSizeInput");
     const statusEl = document.getElementById("status");
     const stage = document.getElementById("stage");
     const world = document.getElementById("world");
     const video = document.getElementById("video");
-    const dot = document.getElementById("dot");
     const frameCanvas = document.getElementById("frameCanvas");
 
     let stream = null;
     let updating = false;
     let updateTimer = null;
-    let hasLock = false;
+    const driverMeta = new Map();
+    const tracks = new Map();
     let lockArmed = false;
-    let dotX = null;
-    let dotY = null;
+    let selectedDriverId = null;
+    let dotSize = 14;
     let zoom = 1;
     let panX = 0;
     let panY = 0;
@@ -139,22 +142,65 @@
     let startPanX = 0;
     let startPanY = 0;
 
-    function setStatus(value, x = null, y = null) {
-      const v = (value || "idle").toLowerCase();
-      const xy = Number.isFinite(x) && Number.isFinite(y)
-        ? ` • x:${Math.round(x)} y:${Math.round(y)}`
+    function updateStatusDisplay() {
+      const track = selectedDriverId ? tracks.get(selectedDriverId) : null;
+      if (!track) {
+        statusEl.textContent = lockArmed ? "ready to lock" : "idle";
+        statusEl.className = "status idle";
+        return;
+      }
+      const xy = Number.isFinite(track.x) && Number.isFinite(track.y)
+        ? ` • x:${Math.round(track.x)} y:${Math.round(track.y)}`
         : "";
-      statusEl.textContent = `${v}${xy}`;
-      statusEl.className = `status ${["locked", "weak", "lost"].includes(v) ? v : "idle"}`;
-      applyDotStyle(v);
+      statusEl.textContent = `${track.status}${xy}`;
+      statusEl.className = `status ${["locking", "locked", "weak", "lost"].includes(track.status) ? track.status : "idle"}`;
     }
 
-    function applyDotStyle(status) {
-      if (dotX === null || dotY === null) return;
-      const s = (status || "").toLowerCase();
-      if (s === "weak") dot.style.background = "#ffcc33";
-      else if (s === "lost") dot.style.background = "#ff6666";
-      else dot.style.background = "#56f056";
+    function applyDotStyle(track) {
+      if (!track) return;
+      if (track.status === "locking") track.dot.style.background = "#66b3ff";
+      else if (track.status === "weak") track.dot.style.background = "#ffcc33";
+      else if (track.status === "lost") track.dot.style.background = "#ff6666";
+      else track.dot.style.background = track.baseColor || "#56f056";
+    }
+
+    function applyDotSize(track) {
+      const half = Math.round(dotSize / 2);
+      track.dot.style.width = `${dotSize}px`;
+      track.dot.style.height = `${dotSize}px`;
+      track.dot.style.marginLeft = `-${half}px`;
+      track.dot.style.marginTop = `-${half}px`;
+    }
+
+    function getOrCreateTrack(driverId) {
+      if (tracks.has(driverId)) return tracks.get(driverId);
+      const meta = driverMeta.get(driverId) || {};
+      const track = {
+        driverId,
+        x: null,
+        y: null,
+        status: "locking",
+        baseColor: meta.color || "#56f056",
+        dot: document.createElement("div")
+      };
+      track.dot.className = "dot";
+      applyDotSize(track);
+      applyDotStyle(track);
+      world.appendChild(track.dot);
+      tracks.set(driverId, track);
+      return track;
+    }
+
+    function setTrackState(driverId, x, y, status) {
+      const track = getOrCreateTrack(driverId);
+      track.x = x;
+      track.y = y;
+      track.status = status;
+      track.dot.style.left = `${x}px`;
+      track.dot.style.top = `${y}px`;
+      track.dot.style.display = "block";
+      applyDotStyle(track);
+      if (selectedDriverId === driverId) updateStatusDisplay();
     }
 
     function applyWorldTransform() {
@@ -173,6 +219,7 @@
         const drivers = Array.isArray(data.drivers) ? data.drivers : [];
 
         for (const d of drivers) {
+          driverMeta.set(Number(d.id), { color: d.primaryColor || "#56f056" });
           const opt = document.createElement("option");
           opt.value = String(d.id);
           opt.textContent = `#${d.id} ${d.name}`;
@@ -186,6 +233,7 @@
           { id: 3, name: "Driver 3" }
         ];
         for (const d of fallback) {
+          driverMeta.set(Number(d.id), { color: "#56f056" });
           const opt = document.createElement("option");
           opt.value = String(d.id);
           opt.textContent = `#${d.id} ${d.name}`;
@@ -214,15 +262,6 @@
       };
     }
 
-    function renderDot(x, y, status = null) {
-      dotX = x;
-      dotY = y;
-      dot.style.left = `${x}px`;
-      dot.style.top = `${y}px`;
-      dot.style.display = "block";
-      if (status) applyDotStyle(status);
-    }
-
     async function lockAtPoint(driverId, x, y) {
       const frame_data_url = currentFrameJpeg(0.88);
 
@@ -242,13 +281,11 @@
 
       const data = await res.json();
       if (!data.ok) throw new Error("Lock failed");
-      hasLock = true;
-      setStatus("locked", x, y);
-      renderDot(x, y, "locked");
+      setTrackState(driverId, x, y, (data.status || "locked").toLowerCase());
     }
 
     async function updateTracks() {
-      if (!hasLock || !video.videoWidth || !video.videoHeight || updating) return;
+      if (!video.videoWidth || !video.videoHeight || updating || tracks.size === 0) return;
       updating = true;
 
       try {
@@ -261,18 +298,22 @@
 
         const data = await res.json();
         if (!data.ok || !Array.isArray(data.results) || data.results.length === 0) return;
-
-        const selectedId = Number(driverSelect.value);
-        const hit = data.results.find(r => Number(r.driver_id) === selectedId) || data.results[0];
-
-        if (typeof hit.x === "number" && typeof hit.y === "number") {
-          renderDot(hit.x, hit.y, hit.status || "locked");
-          setStatus(hit.status || "locked", hit.x, hit.y);
-        } else {
-          setStatus(hit.status || "locked", dotX, dotY);
+        for (const hit of data.results) {
+          const driverId = Number(hit.driver_id);
+          if (!Number.isFinite(driverId) || !tracks.has(driverId)) continue;
+          const track = tracks.get(driverId);
+          const status = (hit.status || track.status || "locked").toLowerCase();
+          const x = Number.isFinite(Number(hit.x)) ? Number(hit.x) : track.x;
+          const y = Number.isFinite(Number(hit.y)) ? Number(hit.y) : track.y;
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            setTrackState(driverId, x, y, status);
+          } else {
+            track.status = status;
+            if (selectedDriverId === driverId) updateStatusDisplay();
+          }
         }
       } catch (_) {
-        setStatus("lost", dotX, dotY);
+        // keep prior statuses on transient update failures
       } finally {
         updating = false;
       }
@@ -284,14 +325,16 @@
     }
 
     function armLockMode() {
-      if (!driverSelect.value) return;
+      if (!selectedDriverId) return;
       lockArmed = true;
       applyWorldTransform();
+      updateStatusDisplay();
     }
 
     function disarmLockMode() {
       lockArmed = false;
       applyWorldTransform();
+      updateStatusDisplay();
     }
 
     captureBtn.addEventListener("click", async () => {
@@ -305,12 +348,12 @@
 
         video.srcObject = stream;
         stream.getVideoTracks()[0].addEventListener("ended", () => {
-          hasLock = false;
-          dotX = null;
-          dotY = null;
-          dot.style.display = "none";
-          setStatus("idle");
+          tracks.forEach((track) => track.dot.remove());
+          tracks.clear();
+          selectedDriverId = null;
+          driverSelect.value = "";
           disarmLockMode();
+          updateStatusDisplay();
           if (updateTimer) clearInterval(updateTimer);
         });
 
@@ -325,16 +368,21 @@
         applyWorldTransform();
         startUpdateLoop();
       } catch (_) {
-        setStatus("idle");
+        updateStatusDisplay();
       }
     });
 
     driverSelect.addEventListener("change", () => {
-      if (driverSelect.value) armLockMode();
-      else disarmLockMode();
+      selectedDriverId = driverSelect.value ? Number(driverSelect.value) : null;
+      disarmLockMode();
+      updateStatusDisplay();
     });
 
     relockBtn.addEventListener("click", () => armLockMode());
+    dotSizeInput.addEventListener("input", () => {
+      dotSize = Number(dotSizeInput.value);
+      tracks.forEach((track) => applyDotSize(track));
+    });
 
     stage.addEventListener("wheel", (event) => {
       if (!video.videoWidth || !video.videoHeight) return;
@@ -385,20 +433,17 @@
 
     stage.addEventListener("click", async (event) => {
       if (!video.videoWidth || !video.videoHeight) return;
-      if (!driverSelect.value || !lockArmed) return;
+      if (!selectedDriverId || !lockArmed) return;
       if (panMoved) return;
 
       const p = clientToVideoPixels(event.clientX, event.clientY);
-      renderDot(p.x, p.y, "weak");
-      setStatus("weak", p.x, p.y);
+      setTrackState(selectedDriverId, p.x, p.y, "locking");
       disarmLockMode();
 
       try {
-        await lockAtPoint(driverSelect.value, p.x, p.y);
+        await lockAtPoint(selectedDriverId, p.x, p.y);
       } catch (_) {
-        hasLock = false;
-        setStatus("lost", p.x, p.y);
-        renderDot(p.x, p.y, "lost");
+        setTrackState(selectedDriverId, p.x, p.y, "lost");
       }
     });
 
