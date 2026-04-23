@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clean Tracker</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+    }
+
+    .app {
+      width: min(1000px, 95vw);
+      display: grid;
+      gap: 12px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    button, select {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #1a1a1a;
+      color: #eee;
+    }
+
+    .status {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      border: 1px solid #333;
+      background: #1a1a1a;
+    }
+
+    .status.locked { color: #56f056; }
+    .status.weak { color: #ffcc33; }
+    .status.lost { color: #ff6666; }
+    .status.idle { color: #aaa; }
+
+    .stage {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      border: 1px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+    }
+
+    video {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      cursor: crosshair;
+    }
+
+    .dot {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      margin-left: -6px;
+      margin-top: -6px;
+      border-radius: 50%;
+      background: #00e5ff;
+      border: 2px solid #fff;
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
+      pointer-events: none;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="controls">
+      <button id="captureBtn" type="button">Capture Screen</button>
+      <select id="driverSelect">
+        <option value="">Select driver</option>
+      </select>
+      <div id="status" class="status idle">idle</div>
+    </div>
+
+    <div class="stage" id="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="dot" class="dot"></div>
+    </div>
+
+    <canvas id="frameCanvas" style="display:none;"></canvas>
+  </div>
+
+  <script>
+    const captureBtn = document.getElementById("captureBtn");
+    const driverSelect = document.getElementById("driverSelect");
+    const statusEl = document.getElementById("status");
+    const stage = document.getElementById("stage");
+    const video = document.getElementById("video");
+    const dot = document.getElementById("dot");
+    const frameCanvas = document.getElementById("frameCanvas");
+
+    let stream = null;
+    let updating = false;
+    let updateTimer = null;
+    let hasLock = false;
+
+    function setStatus(value) {
+      const v = (value || "idle").toLowerCase();
+      statusEl.textContent = v;
+      statusEl.className = `status ${["locked", "weak", "lost"].includes(v) ? v : "idle"}`;
+    }
+
+    async function loadDrivers() {
+      try {
+        const res = await fetch("/api/race", { cache: "no-store" });
+        const data = await res.json();
+        const drivers = Array.isArray(data.drivers) ? data.drivers : [];
+
+        for (const d of drivers) {
+          const opt = document.createElement("option");
+          opt.value = String(d.id);
+          opt.textContent = `#${d.id} ${d.name}`;
+          driverSelect.appendChild(opt);
+        }
+      } catch (_) {
+        // fallback if /api/race unavailable
+        const fallback = [
+          { id: 1, name: "Driver 1" },
+          { id: 2, name: "Driver 2" },
+          { id: 3, name: "Driver 3" }
+        ];
+        for (const d of fallback) {
+          const opt = document.createElement("option");
+          opt.value = String(d.id);
+          opt.textContent = `#${d.id} ${d.name}`;
+          driverSelect.appendChild(opt);
+        }
+      }
+    }
+
+    function currentFrameJpeg(quality = 0.88) {
+      frameCanvas.width = video.videoWidth;
+      frameCanvas.height = video.videoHeight;
+      const ctx = frameCanvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+      return frameCanvas.toDataURL("image/jpeg", quality);
+    }
+
+    function clientToVideoPixels(clientX, clientY) {
+      const rect = video.getBoundingClientRect();
+      const xNorm = (clientX - rect.left) / rect.width;
+      const yNorm = (clientY - rect.top) / rect.height;
+      return {
+        x: Math.max(0, Math.min(video.videoWidth, xNorm * video.videoWidth)),
+        y: Math.max(0, Math.min(video.videoHeight, yNorm * video.videoHeight))
+      };
+    }
+
+    function renderDot(x, y) {
+      const scaleX = video.clientWidth / video.videoWidth;
+      const scaleY = video.clientHeight / video.videoHeight;
+      dot.style.left = `${x * scaleX}px`;
+      dot.style.top = `${y * scaleY}px`;
+      dot.style.display = "block";
+    }
+
+    async function lockAtPoint(driverId, x, y) {
+      const frame_data_url = currentFrameJpeg(0.88);
+
+      const res = await fetch("/api/cv/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          driver_id: Number(driverId),
+          x,
+          y,
+          frame_data_url,
+          patch_w: 44,
+          patch_h: 44,
+          search_radius: 240
+        })
+      });
+
+      const data = await res.json();
+      if (!data.ok) throw new Error("Lock failed");
+      hasLock = true;
+      setStatus("locked");
+      renderDot(x, y);
+    }
+
+    async function updateTracks() {
+      if (!hasLock || !video.videoWidth || !video.videoHeight || updating) return;
+      updating = true;
+
+      try {
+        const frame_data_url = currentFrameJpeg(0.88);
+        const res = await fetch("/api/cv/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ frame_data_url })
+        });
+
+        const data = await res.json();
+        if (!data.ok || !Array.isArray(data.results) || data.results.length === 0) return;
+
+        const selectedId = Number(driverSelect.value);
+        const hit = data.results.find(r => Number(r.driver_id) === selectedId) || data.results[0];
+
+        if (typeof hit.x === "number" && typeof hit.y === "number") {
+          renderDot(hit.x, hit.y);
+        }
+        setStatus(hit.status || "locked");
+      } catch (_) {
+        setStatus("lost");
+      } finally {
+        updating = false;
+      }
+    }
+
+    function startUpdateLoop() {
+      if (updateTimer) clearInterval(updateTimer);
+      updateTimer = setInterval(updateTracks, 80);
+    }
+
+    captureBtn.addEventListener("click", async () => {
+      try {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30, max: 60 } },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        stream.getVideoTracks()[0].addEventListener("ended", () => {
+          hasLock = false;
+          dot.style.display = "none";
+          setStatus("idle");
+          if (updateTimer) clearInterval(updateTimer);
+        });
+
+        await video.play();
+        startUpdateLoop();
+      } catch (_) {
+        setStatus("idle");
+      }
+    });
+
+    video.addEventListener("click", async (event) => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      if (!driverSelect.value) return;
+
+      const p = clientToVideoPixels(event.clientX, event.clientY);
+      try {
+        await lockAtPoint(driverSelect.value, p.x, p.y);
+      } catch (_) {
+        setStatus("lost");
+      }
+    });
+
+    loadDrivers();
+  </script>
+</body>
+</html>
