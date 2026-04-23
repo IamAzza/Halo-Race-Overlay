@@ -57,25 +57,34 @@
       border-radius: 10px;
       overflow: hidden;
       background: #000;
+      cursor: grab;
+    }
+
+    .stage.panning { cursor: grabbing; }
+    .stage.lock-armed { cursor: crosshair; }
+
+    .world {
+      position: relative;
+      transform-origin: top left;
+      will-change: transform;
     }
 
     video {
       display: block;
-      max-width: 100%;
+      max-width: none;
       height: auto;
-      cursor: crosshair;
     }
 
     .dot {
       position: absolute;
-      width: 12px;
-      height: 12px;
-      margin-left: -6px;
-      margin-top: -6px;
-      border-radius: 50%;
-      background: #00e5ff;
+      width: 14px;
+      height: 14px;
+      margin-left: -7px;
+      margin-top: -7px;
+      border-radius: 999px;
+      background: #56f056;
       border: 2px solid #fff;
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
       pointer-events: none;
       display: none;
     }
@@ -88,12 +97,15 @@
       <select id="driverSelect">
         <option value="">Select driver</option>
       </select>
+      <button id="relockBtn" type="button">Relock Next Click</button>
       <div id="status" class="status idle">idle</div>
     </div>
 
     <div class="stage" id="stage">
-      <video id="video" autoplay playsinline muted></video>
-      <div id="dot" class="dot"></div>
+      <div id="world" class="world">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="dot" class="dot"></div>
+      </div>
     </div>
 
     <canvas id="frameCanvas" style="display:none;"></canvas>
@@ -102,8 +114,10 @@
   <script>
     const captureBtn = document.getElementById("captureBtn");
     const driverSelect = document.getElementById("driverSelect");
+    const relockBtn = document.getElementById("relockBtn");
     const statusEl = document.getElementById("status");
     const stage = document.getElementById("stage");
+    const world = document.getElementById("world");
     const video = document.getElementById("video");
     const dot = document.getElementById("dot");
     const frameCanvas = document.getElementById("frameCanvas");
@@ -112,11 +126,44 @@
     let updating = false;
     let updateTimer = null;
     let hasLock = false;
+    let lockArmed = false;
+    let dotX = null;
+    let dotY = null;
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let panMoved = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
 
-    function setStatus(value) {
+    function setStatus(value, x = null, y = null) {
       const v = (value || "idle").toLowerCase();
-      statusEl.textContent = v;
+      const xy = Number.isFinite(x) && Number.isFinite(y)
+        ? ` • x:${Math.round(x)} y:${Math.round(y)}`
+        : "";
+      statusEl.textContent = `${v}${xy}`;
       statusEl.className = `status ${["locked", "weak", "lost"].includes(v) ? v : "idle"}`;
+      applyDotStyle(v);
+    }
+
+    function applyDotStyle(status) {
+      if (dotX === null || dotY === null) return;
+      const s = (status || "").toLowerCase();
+      if (s === "weak") dot.style.background = "#ffcc33";
+      else if (s === "lost") dot.style.background = "#ff6666";
+      else dot.style.background = "#56f056";
+    }
+
+    function applyWorldTransform() {
+      world.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      stage.classList.toggle("lock-armed", lockArmed);
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
     }
 
     async function loadDrivers() {
@@ -156,21 +203,24 @@
     }
 
     function clientToVideoPixels(clientX, clientY) {
-      const rect = video.getBoundingClientRect();
-      const xNorm = (clientX - rect.left) / rect.width;
-      const yNorm = (clientY - rect.top) / rect.height;
+      const rect = world.getBoundingClientRect();
+      const localX = (clientX - rect.left) / zoom;
+      const localY = (clientY - rect.top) / zoom;
+      const xNorm = localX / video.videoWidth;
+      const yNorm = localY / video.videoHeight;
       return {
         x: Math.max(0, Math.min(video.videoWidth, xNorm * video.videoWidth)),
         y: Math.max(0, Math.min(video.videoHeight, yNorm * video.videoHeight))
       };
     }
 
-    function renderDot(x, y) {
-      const scaleX = video.clientWidth / video.videoWidth;
-      const scaleY = video.clientHeight / video.videoHeight;
-      dot.style.left = `${x * scaleX}px`;
-      dot.style.top = `${y * scaleY}px`;
+    function renderDot(x, y, status = null) {
+      dotX = x;
+      dotY = y;
+      dot.style.left = `${x}px`;
+      dot.style.top = `${y}px`;
       dot.style.display = "block";
+      if (status) applyDotStyle(status);
     }
 
     async function lockAtPoint(driverId, x, y) {
@@ -193,8 +243,8 @@
       const data = await res.json();
       if (!data.ok) throw new Error("Lock failed");
       hasLock = true;
-      setStatus("locked");
-      renderDot(x, y);
+      setStatus("locked", x, y);
+      renderDot(x, y, "locked");
     }
 
     async function updateTracks() {
@@ -216,11 +266,13 @@
         const hit = data.results.find(r => Number(r.driver_id) === selectedId) || data.results[0];
 
         if (typeof hit.x === "number" && typeof hit.y === "number") {
-          renderDot(hit.x, hit.y);
+          renderDot(hit.x, hit.y, hit.status || "locked");
+          setStatus(hit.status || "locked", hit.x, hit.y);
+        } else {
+          setStatus(hit.status || "locked", dotX, dotY);
         }
-        setStatus(hit.status || "locked");
       } catch (_) {
-        setStatus("lost");
+        setStatus("lost", dotX, dotY);
       } finally {
         updating = false;
       }
@@ -229,6 +281,17 @@
     function startUpdateLoop() {
       if (updateTimer) clearInterval(updateTimer);
       updateTimer = setInterval(updateTracks, 80);
+    }
+
+    function armLockMode() {
+      if (!driverSelect.value) return;
+      lockArmed = true;
+      applyWorldTransform();
+    }
+
+    function disarmLockMode() {
+      lockArmed = false;
+      applyWorldTransform();
     }
 
     captureBtn.addEventListener("click", async () => {
@@ -243,27 +306,99 @@
         video.srcObject = stream;
         stream.getVideoTracks()[0].addEventListener("ended", () => {
           hasLock = false;
+          dotX = null;
+          dotY = null;
           dot.style.display = "none";
           setStatus("idle");
+          disarmLockMode();
           if (updateTimer) clearInterval(updateTimer);
         });
 
         await video.play();
+        video.style.width = `${video.videoWidth}px`;
+        video.style.height = `${video.videoHeight}px`;
+        world.style.width = `${video.videoWidth}px`;
+        world.style.height = `${video.videoHeight}px`;
+        zoom = 1;
+        panX = 0;
+        panY = 0;
+        applyWorldTransform();
         startUpdateLoop();
       } catch (_) {
         setStatus("idle");
       }
     });
 
-    video.addEventListener("click", async (event) => {
+    driverSelect.addEventListener("change", () => {
+      if (driverSelect.value) armLockMode();
+      else disarmLockMode();
+    });
+
+    relockBtn.addEventListener("click", () => armLockMode());
+
+    stage.addEventListener("wheel", (event) => {
       if (!video.videoWidth || !video.videoHeight) return;
-      if (!driverSelect.value) return;
+      event.preventDefault();
+
+      const oldZoom = zoom;
+      const newZoom = clamp(zoom * (event.deltaY < 0 ? 1.1 : 0.9), 1, 4);
+      if (newZoom === oldZoom) return;
+
+      const rect = stage.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+      const worldX = (px - panX) / oldZoom;
+      const worldY = (py - panY) / oldZoom;
+
+      zoom = newZoom;
+      panX = px - worldX * zoom;
+      panY = py - worldY * zoom;
+      applyWorldTransform();
+    }, { passive: false });
+
+    stage.addEventListener("mousedown", (event) => {
+      if (zoom <= 1 || lockArmed) return;
+      isPanning = true;
+      panMoved = false;
+      stage.classList.add("panning");
+      panStartX = event.clientX;
+      panStartY = event.clientY;
+      startPanX = panX;
+      startPanY = panY;
+    });
+
+    window.addEventListener("mousemove", (event) => {
+      if (!isPanning) return;
+      const dx = event.clientX - panStartX;
+      const dy = event.clientY - panStartY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) panMoved = true;
+      panX = startPanX + dx;
+      panY = startPanY + dy;
+      applyWorldTransform();
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!isPanning) return;
+      isPanning = false;
+      stage.classList.remove("panning");
+    });
+
+    stage.addEventListener("click", async (event) => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      if (!driverSelect.value || !lockArmed) return;
+      if (panMoved) return;
 
       const p = clientToVideoPixels(event.clientX, event.clientY);
+      renderDot(p.x, p.y, "weak");
+      setStatus("weak", p.x, p.y);
+      disarmLockMode();
+
       try {
         await lockAtPoint(driverSelect.value, p.x, p.y);
       } catch (_) {
-        setStatus("lost");
+        hasLock = false;
+        setStatus("lost", p.x, p.y);
+        renderDot(p.x, p.y, "lost");
       }
     });
 
